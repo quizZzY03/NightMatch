@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem \"C:\\\\Users\\\\Yarin Ben Moshe\\\\Desktop\\\\אפליקציה ירין\" -Force)",
+      "Bash(ls -la \"/mnt/c/Users/Yarin Ben Moshe/Desktop/אפליקציה ירין/\" 2>&1 || echo \"Directory empty or WSL path issue\")",
+      "Bash(npm --version)",
+      "PowerShell(node --version)",
+      "PowerShell(npm --version)",
+      "Bash(sleep 15 && cat \"/mnt/c/Users/YARINB~1/AppData/Local/Temp/claude/C--Users-Yarin-Ben-Moshe-Desktop--------------/87a0bc37-624e-4611-93a8-bfc75a143e2e/tasks/bcg9fcy10.output\" 2>/dev/null | tail -20)",
+      "PowerShell($env:PATH = [System.Environment]::GetEnvironmentVariable\\(\"PATH\", \"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"PATH\", \"User\"\\); node --version; npm --version)",
+      "mcp__Claude_Preview__preview_start",
+      "Read(//mnt/c/Program Files/**)",
+      "Read(//mnt/**)",
+      "Bash(node node_modules/vite/bin/vite.js build)",
+      "mcp__Claude_in_Chrome__tabs_context_mcp"
+    ]
+  }
+}

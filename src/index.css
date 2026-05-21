@@ -1,0 +1,151 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  html {
+    height: 100%;
+    /* Use dvh when available (accounts for mobile browser chrome) */
+    height: 100dvh;
+    background: #0a0a12;
+    overflow: hidden;
+  }
+
+  body {
+    height: 100%;
+    height: 100dvh;
+    margin: 0;
+    padding: 0;
+    background: #0a0a12;
+    font-family: 'Heebo', 'Inter', sans-serif;
+    color: white;
+    overflow: hidden;
+    overscroll-behavior: none;
+    /* Prevent callout on long press (iOS) */
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* Allow text selection in inputs/textareas */
+  input, textarea { -webkit-user-select: text; user-select: text; }
+
+  #root {
+    height: 100%;
+    height: 100dvh;
+  }
+}
+
+@layer components {
+  .glass-card {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-radius: 1rem;
+  }
+
+  .neon-text-purple {
+    color: hsl(290, 100%, 65%);
+    text-shadow: 0 0 10px hsl(290, 100%, 65%, 0.8), 0 0 30px hsl(290, 100%, 65%, 0.4);
+  }
+  .neon-text-pink {
+    color: hsl(320, 100%, 60%);
+    text-shadow: 0 0 10px hsl(320, 100%, 60%, 0.8), 0 0 30px hsl(320, 100%, 60%, 0.4);
+  }
+  .neon-text-cyan {
+    color: hsl(185, 100%, 55%);
+    text-shadow: 0 0 10px hsl(185, 100%, 55%, 0.8), 0 0 30px hsl(185, 100%, 55%, 0.4);
+  }
+
+  .gradient-purple-pink {
+    background: linear-gradient(135deg, hsl(290, 100%, 65%), hsl(320, 100%, 60%));
+  }
+  .gradient-cyan-purple {
+    background: linear-gradient(135deg, hsl(185, 100%, 55%), hsl(290, 100%, 65%));
+  }
+
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
+  .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+  /* Scrollable areas with momentum on iOS */
+  .scroll-area {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+  }
+}
+
+/* Swipe card */
+.swipe-card { cursor: grab; touch-action: none; }
+.swipe-card:active { cursor: grabbing; }
+
+/* Floating particles */
+@keyframes particle-float {
+  0% { transform: translateY(100vh) rotate(0deg); opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { transform: translateY(-100px) rotate(720deg); opacity: 0; }
+}
+.particle {
+  position: fixed;
+  pointer-events: none;
+  border-radius: 50%;
+  animation: particle-float linear infinite;
+}
+
+/* ── Desktop: show a phone frame ─────────────────────────────────────────── */
+@media (min-width: 640px) {
+  body {
+    background: #05050d;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  #root {
+    width: 390px;
+    height: min(844px, 100dvh);
+    border-radius: 44px;
+    overflow: hidden;
+    position: relative;
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,0.08),
+      0 0 60px hsl(290,100%,65%,0.15),
+      0 40px 120px rgba(0,0,0,0.8);
+  }
+
+  /* Fake phone notch (visual only) */
+  #root::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 120px;
+    height: 34px;
+    background: #05050d;
+    border-radius: 0 0 22px 22px;
+    z-index: 9999;
+  }
+
+  /* Fake home indicator bar */
+  #root::after {
+    content: '';
+    position: absolute;
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 130px;
+    height: 5px;
+    background: rgba(255,255,255,0.25);
+    border-radius: 999px;
+    z-index: 9999;
+  }
+}
+
+/* ── Safe area padding for real phones ───────────────────────────────────── */
+.safe-top    { padding-top: env(safe-area-inset-top, 0px); }
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
