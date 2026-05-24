@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Firebase CLI binary (too large for git)
+firebase.exe
+
+# Firebase local cache
+.firebase/
+
+# Local Claude settings
+.claude/settings.local.json
+
+# Temp scripts
+install-supabase.cjs
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+
+# Editor
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
