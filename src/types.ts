@@ -133,5 +133,5 @@ export interface AppContextValue {
   refreshCheckin: () => void
   toggleLang: () => void
   clearNewMatchCount: () => void
-  onAuthSuccess: (fbUser: import('firebase/auth').User) => Promise<void>
+  onAuthSuccess: (fbUser: import('firebase/auth').User) => void
 }

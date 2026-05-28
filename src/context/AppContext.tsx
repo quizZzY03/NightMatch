@@ -4,7 +4,7 @@ import { onAuthStateChanged } from '../firebase/auth'
 import { getUser, saveUser as fbSaveUser, listenMatches } from '../firebase/db'
 import { FIREBASE_CONFIGURED } from '../firebase/config'
 import { getCurrentUser, saveUser as localSaveUser, getActiveCheckin } from '../utils/storage'
-import { ADMIN_UID } from '../config/admin'
+import { ADMIN_UID, ADMIN_EMAILS } from '../config/admin'
 import type { User, Checkin, Match, Lang, AppContextValue } from '../types'
 
 const AppContext = createContext<AppContextValue | null>(null)
@@ -43,7 +43,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     async function load() {
       setUser(null)
-      const isAdmin = FIREBASE_CONFIGURED && (firebaseUser as FirebaseUser).uid === ADMIN_UID
+      const fbU = firebaseUser as FirebaseUser
+      const isAdmin = FIREBASE_CONFIGURED && (fbU.uid === ADMIN_UID || ADMIN_EMAILS.includes(fbU.email ?? ''))
       let profile: User | null = null
       try {
         const isQaBypassed = import.meta.env.DEV && localStorage.getItem('nightmatch_qa_bypass') === 'true'
@@ -120,21 +121,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const clearNewMatchCount = useCallback(() => setNewMatchCount(0), [])
 
-  const onAuthSuccess = useCallback(async (fbUser: FirebaseUser): Promise<void> => {
-    setUser(null) // clear any stale state before loading new profile
+  // onAuthSuccess — called after popup sign-in. Just update firebaseUser;
+  // load() via useEffect handles everything else (avoids race condition).
+  const onAuthSuccess = useCallback((fbUser: FirebaseUser): void => {
     setFirebaseUser(fbUser)
-    let profile: User | null = null
-    if (FIREBASE_CONFIGURED) {
-      profile = await getUser(fbUser.uid)
-    } else {
-      profile = getCurrentUser()
-    }
-    if (profile && !profile.is_demo) {
-      const isAdmin = FIREBASE_CONFIGURED && fbUser.uid === ADMIN_UID
-      const enriched: User = { ...profile, is_admin: isAdmin }
-      setUser(enriched)
-      if (enriched.language) setLang(enriched.language)
-    }
   }, [])
 
   return (
@@ -148,7 +138,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       initialized,
       isRTL: lang === 'he',
       needsAuth: firebaseUser === null,
-      needsOnboarding: initialized && !user?.onboarding_complete && !user?.is_admin,
+      needsOnboarding: initialized && !user?.onboarding_complete && !user?.is_admin &&
+        !ADMIN_EMAILS.includes((firebaseUser as FirebaseUser | null)?.email ?? ''),
       updateUser,
       refreshCheckin,
       toggleLang,
