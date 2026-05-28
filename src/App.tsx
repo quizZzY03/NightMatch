@@ -1,6 +1,7 @@
 import React from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useApp } from './context/AppContext'
+import { ADMIN_EMAILS } from './config/admin'
 import Layout from './components/Layout'
 import Home from './pages/Home'
 import CheckIn from './pages/CheckIn'
@@ -44,13 +45,19 @@ function Spinner() {
 }
 
 function AdminRoute({ children }: { children: React.ReactNode }) {
-  const { user } = useApp()
-  if (!user?.is_admin) return <Navigate to="/" replace />
+  const { user, firebaseUser } = useApp()
+  const fbEmail = (firebaseUser as { email?: string | null } | null)?.email ?? ''
+  const isAdmin = user?.is_admin === true || ADMIN_EMAILS.includes(fbEmail)
+  if (!isAdmin) return <Navigate to="/" replace />
   return <>{children}</>
 }
 
 export default function App() {
-  const { initialized, needsAuth, needsOnboarding, onAuthSuccess, firebaseUser } = useApp()
+  const { initialized, needsAuth, needsOnboarding, onAuthSuccess, firebaseUser, user } = useApp()
+
+  // Hard admin bypass — email in ADMIN_EMAILS always skips onboarding
+  const fbEmail = (firebaseUser as { email?: string | null } | null)?.email ?? ''
+  const isHardAdmin = ADMIN_EMAILS.includes(fbEmail) || user?.is_admin === true
 
   // Still waiting for Firebase auth to resolve
   if (!initialized && firebaseUser === undefined) {
@@ -74,8 +81,8 @@ export default function App() {
     )
   }
 
-  // Onboarding (new user — no profile yet)
-  if (needsOnboarding) {
+  // Onboarding (new user — no profile yet) — hard admins always skip
+  if (needsOnboarding && !isHardAdmin) {
     return (
       <div className="h-full relative">
         <Particles />
@@ -99,7 +106,7 @@ export default function App() {
       <div className="relative z-10 h-full">
         <Layout>
           <Routes>
-            <Route path="/" element={user?.is_admin ? <Navigate to="/admin" replace /> : <Home />} />
+            <Route path="/" element={isHardAdmin ? <Navigate to="/admin" replace /> : <Home />} />
             <Route path="/checkin" element={<CheckIn />} />
             <Route path="/feed" element={<Feed />} />
             <Route path="/matches" element={<Matches />} />

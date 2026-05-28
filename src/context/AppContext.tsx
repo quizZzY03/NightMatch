@@ -69,6 +69,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             onboarding_complete: true,
           } as User
         }
+        console.log('[AppContext] load finally — uid:', (firebaseUser as FirebaseUser).uid, 'email:', (firebaseUser as FirebaseUser).email, 'isAdmin:', isAdmin, 'onboarding_complete:', profile?.onboarding_complete)
         if (profile && !profile.is_demo) {
           const enriched: User = { ...profile, is_admin: isAdmin }
           setUser(enriched)
