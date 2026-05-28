@@ -1,4 +1,4 @@
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
+import { doc, setDoc, serverTimestamp, getDocs, collection, updateDoc } from 'firebase/firestore'
 import { db } from '../firebase/config'
 
 /**
@@ -15,61 +15,61 @@ export const PRODUCTION_VENUES: Array<{
   lng: number
   geofence_radius: number
 }> = [
-  // ── תל אביב ───────────────────────────────────────────────────────────────
-  {
-    id: 'port-bar-tlv',
-    name: 'בר הנמל', name_en: 'Port Bar', city: 'תל אביב',
-    venue_type: 'bar', lat: 32.0967, lng: 34.7668, geofence_radius: 300,
-  },
-  {
-    id: 'sensation-club-tlv',
-    name: 'קלאב הסנסציה', name_en: 'Sensation Club', city: 'תל אביב',
-    venue_type: 'club', lat: 32.0853, lng: 34.7818, geofence_radius: 200,
-  },
-  {
-    id: 'rooftop-bar-tlv',
-    name: 'הגג — רוף בר', name_en: 'The Rooftop Bar', city: 'תל אביב',
-    venue_type: 'bar', lat: 32.0790, lng: 34.7720, geofence_radius: 200,
-  },
-  {
-    id: 'rothschild-club-tlv',
-    name: 'קלאב רוטשילד', name_en: 'Rothschild Club', city: 'תל אביב',
-    venue_type: 'club', lat: 32.0613, lng: 34.7745, geofence_radius: 250,
-  },
-  {
-    id: 'barbara-bar-tlv',
-    name: 'ברברה בר', name_en: 'Barbara Bar', city: 'תל אביב',
-    venue_type: 'bar', lat: 32.0665, lng: 34.7720, geofence_radius: 150,
-  },
-  {
-    id: 'shishkin-tlv',
-    name: 'שישקין', name_en: 'Shishkin', city: 'תל אביב',
-    venue_type: 'bar', lat: 32.0780, lng: 34.7810, geofence_radius: 150,
-  },
   // ── ראשון לציון ───────────────────────────────────────────────────────────
   {
     id: 'rotch-rishon',
-    name: 'רוטצ׳', name_en: "Rotch", city: 'ראשון לציון',
+    name: 'רוטשילד 26', name_en: 'Rothschild 26', city: 'ראשון לציון',
     venue_type: 'bar', lat: 31.9649, lng: 34.7922, geofence_radius: 150,
   },
-  // ── אירועים ───────────────────────────────────────────────────────────────
   {
-    id: 'wedding-venue-rg',
-    name: 'חתונה כללית', name_en: 'Wedding Venue', city: 'רמת גן',
-    venue_type: 'wedding', lat: 32.0824, lng: 34.8137, geofence_radius: 500,
+    id: 'beer-house-rishon',
+    name: 'ביר האוס', name_en: 'Beer House', city: 'ראשון לציון',
+    venue_type: 'bar', lat: 31.9621, lng: 34.8030, geofence_radius: 150,
   },
   {
-    id: 'pride-night-tlv',
-    name: 'ערב פרייד', name_en: 'Pride Night', city: 'תל אביב',
-    venue_type: 'event', lat: 32.0731, lng: 34.7737, geofence_radius: 400,
+    id: 'pirate-pub-rishon',
+    name: 'פאב הפיראט', name_en: 'The Pirate Pub', city: 'ראשון לציון',
+    venue_type: 'bar', lat: 31.9749, lng: 34.8079, geofence_radius: 150,
+  },
+  {
+    id: 'garden83-rishon',
+    name: 'גארדן 83', name_en: 'Garden 83', city: 'ראשון לציון',
+    venue_type: 'bar', lat: 31.9645, lng: 34.7960, geofence_radius: 150,
+  },
+  {
+    id: 'pacho-rishon',
+    name: 'פאצ\'ו', name_en: 'Pacho Bar', city: 'ראשון לציון',
+    venue_type: 'bar', lat: 31.9632, lng: 34.8002, geofence_radius: 150,
+  },
+  {
+    id: 'pub55-rishon',
+    name: 'פאב 55', name_en: 'Pub 55', city: 'ראשון לציון',
+    venue_type: 'bar', lat: 31.9797, lng: 34.7476, geofence_radius: 200,
+  },
+  {
+    id: 'temple-bar-rishon',
+    name: 'Temple Bar', name_en: 'Temple Bar', city: 'ראשון לציון',
+    venue_type: 'bar', lat: 31.9635, lng: 34.8015, geofence_radius: 150,
   },
 ]
 
 /**
- * Upsert all venues (setDoc with merge:true) — idempotent, safe to run repeatedly.
+ * Upsert all venues and deactivate any old venues not in the current list.
+ * Safe to run repeatedly — idempotent.
  * Returns number of venues written.
  */
 export async function seedProductionVenues(): Promise<number> {
+  const activeIds = new Set(PRODUCTION_VENUES.map(v => v.id))
+
+  // Deactivate old venues no longer in the list
+  const existing = await getDocs(collection(db, 'venues'))
+  await Promise.all(
+    existing.docs
+      .filter(d => !activeIds.has(d.id))
+      .map(d => updateDoc(d.ref, { is_active: false, updated_at: serverTimestamp() }))
+  )
+
+  // Upsert current venues
   await Promise.all(
     PRODUCTION_VENUES.map(({ id, ...data }) =>
       setDoc(
@@ -79,6 +79,6 @@ export async function seedProductionVenues(): Promise<number> {
       )
     )
   )
-  console.log('Seeded', PRODUCTION_VENUES.length, 'venues')
+  console.log('Seeded', PRODUCTION_VENUES.length, 'venues, deactivated', existing.docs.filter(d => !activeIds.has(d.id)).length, 'old venues')
   return PRODUCTION_VENUES.length
 }
