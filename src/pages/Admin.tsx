@@ -222,7 +222,13 @@ export default function Admin() {
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-bold text-white/60 uppercase tracking-wider">ברקודי וונות</h2>
-                <span className="text-xs text-white/25">{venues.length} וונות</span>
+                <button
+                  onClick={handleSeedVenues}
+                  disabled={busy}
+                  className="flex items-center gap-1.5 text-xs text-white/40 hover:text-white/70 transition-colors disabled:opacity-40"
+                >
+                  {busy ? '⏳' : '🔄'} {venues.length > 0 ? 'עדכן רשימה' : 'טען וונות'}
+                </button>
               </div>
 
               {venues.length === 0 ? (
@@ -233,7 +239,7 @@ export default function Admin() {
                   <button onClick={handleSeedVenues} disabled={busy}
                     className="px-5 py-2.5 rounded-2xl text-sm font-semibold text-white disabled:opacity-40"
                     style={{ background: 'linear-gradient(135deg, hsl(290,100%,55%), hsl(320,100%,50%))' }}>
-                    {busy ? '⏳ טוען...' : '🚀 טען וונות לדוגמה'}
+                    {busy ? '⏳ טוען...' : '🚀 טען וונות'}
                   </button>
                 </div>
               ) : (
