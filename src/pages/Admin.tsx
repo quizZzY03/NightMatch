@@ -5,6 +5,7 @@ import { db, FIREBASE_CONFIGURED, ADMIN_UIDS } from '../firebase/config'
 import { getVenues } from '../firebase/db'
 import { useApp } from '../context/AppContext'
 import { seedProductionVenues } from '../utils/seedVenues'
+import AdminTestPanel from './AdminTestPanel'
 
 function qrUrl(venueId: string, size = 280) {
   return `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(venueId)}&size=${size}x${size}&bgcolor=ffffff&color=000000&qzone=2`
@@ -42,6 +43,7 @@ const inputCls = "w-full bg-white/5 border border-white/12 rounded-2xl px-4 py-3
 export default function Admin() {
   const { user, firebaseUser } = useApp()
   const [venues, setVenues] = useState([])
+  const [activeTab, setActiveTab] = useState<'venues' | 'test'>('venues')
   const [showAddForm, setShowAddForm] = useState(false)
   const [form, setForm] = useState({ name: '', name_en: '', city: '', lat: '', lng: '', radius: '200' })
   const [busy, setBusy] = useState(false)
@@ -183,138 +185,160 @@ export default function Admin() {
         )}
       </AnimatePresence>
 
-      <div className="p-5 space-y-6 pb-10">
+      <div className="p-5 space-y-5 pb-10">
         {/* Header */}
         <div className="pt-2">
           <h1 className="text-2xl font-black text-white">ניהול</h1>
           <p className="text-sm text-white/30 mt-0.5">NightMatch Admin</p>
         </div>
 
-        {/* Venues section */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-white/60 uppercase tracking-wider">ברקודי וונות</h2>
-            <span className="text-xs text-white/25">{venues.length} וונות</span>
-          </div>
-
-          {venues.length === 0 ? (
-            <div className="rounded-2xl border border-white/10 p-8 text-center space-y-4"
-              style={{ background: 'rgba(255,255,255,0.03)' }}>
-              <div className="text-4xl">🏙</div>
-              <p className="text-white/50 text-sm">אין וונות עדיין</p>
-              <button onClick={handleSeedVenues} disabled={busy}
-                className="px-5 py-2.5 rounded-2xl text-sm font-semibold text-white disabled:opacity-40"
-                style={{ background: 'linear-gradient(135deg, hsl(290,100%,55%), hsl(320,100%,50%))' }}>
-                {busy ? '⏳ טוען...' : '🚀 טען וונות לדוגמה'}
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {venues.map((v, i) => (
-                <motion.div key={v.id}
-                  initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
-                  onClick={() => setSelectedQR(v)}
-                  className="flex items-center gap-4 rounded-2xl border border-white/10 p-4 cursor-pointer transition-all active:scale-[0.98] hover:border-[hsl(290,100%,65%,0.4)]"
-                  style={{ background: 'rgba(255,255,255,0.03)' }}>
-                  {/* QR thumbnail */}
-                  <div className="shrink-0 p-1.5 bg-white rounded-xl">
-                    <img src={qrUrl(v.id, 80)} alt="QR" className="w-14 h-14 rounded-lg" style={{ imageRendering: 'pixelated' }} />
-                  </div>
-                  {/* Info */}
-                  <div className="flex-1 min-w-0">
-                    <p className="font-bold text-white text-base leading-tight">{v.name}</p>
-                    <p className="text-xs text-white/40 mt-0.5">{v.city}</p>
-                    <p className="text-[11px] text-white/20 font-mono mt-1 truncate">{v.id}</p>
-                  </div>
-                  {/* Arrow */}
-                  <div className="shrink-0 text-white/20 text-lg">‹</div>
-                </motion.div>
-              ))}
-            </div>
-          )}
+        {/* Tabs */}
+        <div className="flex gap-2 rounded-2xl p-1" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
+          {([
+            { key: 'venues', label: '🏙 וונות' },
+            { key: 'test',   label: '🧪 סביבת טסט' },
+          ] as const).map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-all"
+              style={{
+                background: activeTab === tab.key ? 'linear-gradient(135deg, hsl(290,100%,55%), hsl(320,100%,50%))' : 'transparent',
+                color: activeTab === tab.key ? '#fff' : 'rgba(255,255,255,0.35)',
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
 
-        {/* Divider */}
-        <div className="border-t border-white/8" />
+        {/* Test panel */}
+        {activeTab === 'test' && <AdminTestPanel venues={venues} />}
 
-        {/* Add venue */}
-        <div className="space-y-3">
-          <button
-            onClick={() => setShowAddForm(v => !v)}
-            className="w-full flex items-center justify-between rounded-2xl border border-white/10 p-4 transition-all hover:border-white/20"
-            style={{ background: 'rgba(255,255,255,0.03)' }}>
-            <div className="flex items-center gap-3">
-              <span className="text-xl">➕</span>
-              <span className="font-semibold text-white">הוסף וונה חדשה</span>
-            </div>
-            <motion.span animate={{ rotate: showAddForm ? 90 : 0 }} className="text-white/30">›</motion.span>
-          </button>
+        {/* Venues tab */}
+        {activeTab === 'venues' && (
+          <div className="space-y-6">
+            {/* Venues list */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-bold text-white/60 uppercase tracking-wider">ברקודי וונות</h2>
+                <span className="text-xs text-white/25">{venues.length} וונות</span>
+              </div>
 
-          <AnimatePresence>
-            {showAddForm && (
-              <motion.div
-                key="addForm"
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="overflow-hidden">
-                <div className="rounded-2xl border border-white/10 p-5 space-y-4"
+              {venues.length === 0 ? (
+                <div className="rounded-2xl border border-white/10 p-8 text-center space-y-4"
                   style={{ background: 'rgba(255,255,255,0.03)' }}>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="col-span-2">
-                      <label className="block text-xs text-white/40 mb-1.5">שם הוונה *</label>
-                      <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                        placeholder="בר הנמל" className={inputCls} />
-                    </div>
-                    <div className="col-span-2">
-                      <label className="block text-xs text-white/40 mb-1.5">שם באנגלית</label>
-                      <input value={form.name_en} onChange={e => setForm(f => ({ ...f, name_en: e.target.value }))}
-                        placeholder="Port Bar" className={inputCls} />
-                    </div>
-                    <div className="col-span-2">
-                      <label className="block text-xs text-white/40 mb-1.5">עיר</label>
-                      <input value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))}
-                        placeholder="תל אביב" className={inputCls} />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-white/40 mb-1.5">Latitude *</label>
-                      <input value={form.lat} onChange={e => setForm(f => ({ ...f, lat: e.target.value }))}
-                        placeholder="32.0853" className={inputCls} inputMode="decimal" />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-white/40 mb-1.5">Longitude *</label>
-                      <input value={form.lng} onChange={e => setForm(f => ({ ...f, lng: e.target.value }))}
-                        placeholder="34.7818" className={inputCls} inputMode="decimal" />
-                    </div>
-                    <div className="col-span-2">
-                      <label className="block text-xs text-white/40 mb-1.5">רדיוס GPS (מטרים)</label>
-                      <input value={form.radius} onChange={e => setForm(f => ({ ...f, radius: e.target.value }))}
-                        placeholder="200" className={inputCls} inputMode="numeric" />
-                    </div>
-                  </div>
-
-                  <p className="text-xs text-white/25 text-center">
-                    לקואורדינטות: Google Maps → לחץ ימני → "What's here"
-                  </p>
-
-                  <button onClick={handleAddVenue} disabled={busy || !form.name || !form.lat || !form.lng}
-                    className="w-full py-3.5 rounded-2xl text-sm font-bold text-white disabled:opacity-40 transition-all"
+                  <div className="text-4xl">🏙</div>
+                  <p className="text-white/50 text-sm">אין וונות עדיין</p>
+                  <button onClick={handleSeedVenues} disabled={busy}
+                    className="px-5 py-2.5 rounded-2xl text-sm font-semibold text-white disabled:opacity-40"
                     style={{ background: 'linear-gradient(135deg, hsl(290,100%,55%), hsl(320,100%,50%))' }}>
-                    {busy ? '⏳ שומר...' : '✅ הוסף וונה'}
+                    {busy ? '⏳ טוען...' : '🚀 טען וונות לדוגמה'}
                   </button>
                 </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
+              ) : (
+                <div className="space-y-2">
+                  {venues.map((v, i) => (
+                    <motion.div key={v.id}
+                      initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
+                      onClick={() => setSelectedQR(v)}
+                      className="flex items-center gap-4 rounded-2xl border border-white/10 p-4 cursor-pointer transition-all active:scale-[0.98] hover:border-[hsl(290,100%,65%,0.4)]"
+                      style={{ background: 'rgba(255,255,255,0.03)' }}>
+                      <div className="shrink-0 p-1.5 bg-white rounded-xl">
+                        <img src={qrUrl(v.id, 80)} alt="QR" className="w-14 h-14 rounded-lg" style={{ imageRendering: 'pixelated' }} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-white text-base leading-tight">{v.name}</p>
+                        <p className="text-xs text-white/40 mt-0.5">{v.city}</p>
+                        <p className="text-[11px] text-white/20 font-mono mt-1 truncate">{v.id}</p>
+                      </div>
+                      <div className="shrink-0 text-white/20 text-lg">‹</div>
+                    </motion.div>
+                  ))}
+                </div>
+              )}
+            </div>
 
-        {/* Firebase Console link */}
-        <a href="https://console.firebase.google.com/project/nightmatch-34424/firestore/data/~2Fvenues"
-          target="_blank" rel="noreferrer"
-          className="flex items-center justify-center gap-2 text-xs text-white/25 hover:text-white/50 transition-colors py-2">
-          <span>🔗</span>
-          <span>Firebase Console → Venues</span>
-        </a>
+            <div className="border-t border-white/8" />
+
+            {/* Add venue */}
+            <div className="space-y-3">
+              <button
+                onClick={() => setShowAddForm(v => !v)}
+                className="w-full flex items-center justify-between rounded-2xl border border-white/10 p-4 transition-all hover:border-white/20"
+                style={{ background: 'rgba(255,255,255,0.03)' }}>
+                <div className="flex items-center gap-3">
+                  <span className="text-xl">➕</span>
+                  <span className="font-semibold text-white">הוסף וונה חדשה</span>
+                </div>
+                <motion.span animate={{ rotate: showAddForm ? 90 : 0 }} className="text-white/30">›</motion.span>
+              </button>
+
+              <AnimatePresence>
+                {showAddForm && (
+                  <motion.div
+                    key="addForm"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="overflow-hidden">
+                    <div className="rounded-2xl border border-white/10 p-5 space-y-4"
+                      style={{ background: 'rgba(255,255,255,0.03)' }}>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="col-span-2">
+                          <label className="block text-xs text-white/40 mb-1.5">שם הוונה *</label>
+                          <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                            placeholder="בר הנמל" className={inputCls} />
+                        </div>
+                        <div className="col-span-2">
+                          <label className="block text-xs text-white/40 mb-1.5">שם באנגלית</label>
+                          <input value={form.name_en} onChange={e => setForm(f => ({ ...f, name_en: e.target.value }))}
+                            placeholder="Port Bar" className={inputCls} />
+                        </div>
+                        <div className="col-span-2">
+                          <label className="block text-xs text-white/40 mb-1.5">עיר</label>
+                          <input value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))}
+                            placeholder="תל אביב" className={inputCls} />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-white/40 mb-1.5">Latitude *</label>
+                          <input value={form.lat} onChange={e => setForm(f => ({ ...f, lat: e.target.value }))}
+                            placeholder="32.0853" className={inputCls} inputMode="decimal" />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-white/40 mb-1.5">Longitude *</label>
+                          <input value={form.lng} onChange={e => setForm(f => ({ ...f, lng: e.target.value }))}
+                            placeholder="34.7818" className={inputCls} inputMode="decimal" />
+                        </div>
+                        <div className="col-span-2">
+                          <label className="block text-xs text-white/40 mb-1.5">רדיוס GPS (מטרים)</label>
+                          <input value={form.radius} onChange={e => setForm(f => ({ ...f, radius: e.target.value }))}
+                            placeholder="200" className={inputCls} inputMode="numeric" />
+                        </div>
+                      </div>
+                      <p className="text-xs text-white/25 text-center">
+                        לקואורדינטות: Google Maps → לחץ ימני → "What's here"
+                      </p>
+                      <button onClick={handleAddVenue} disabled={busy || !form.name || !form.lat || !form.lng}
+                        className="w-full py-3.5 rounded-2xl text-sm font-bold text-white disabled:opacity-40 transition-all"
+                        style={{ background: 'linear-gradient(135deg, hsl(290,100%,55%), hsl(320,100%,50%))' }}>
+                        {busy ? '⏳ שומר...' : '✅ הוסף וונה'}
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Firebase Console link */}
+            <a href="https://console.firebase.google.com/project/nightmatch-34424/firestore/data/~2Fvenues"
+              target="_blank" rel="noreferrer"
+              className="flex items-center justify-center gap-2 text-xs text-white/25 hover:text-white/50 transition-colors py-2">
+              <span>🔗</span>
+              <span>Firebase Console → Venues</span>
+            </a>
+          </div>
+        )}
       </div>
     </div>
   )
