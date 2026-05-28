@@ -108,6 +108,8 @@ export interface FeedPerson {
   age: number | string
   gender: 'male' | 'female' | 'other' | ''
   photo1_url?: string | null
+  photo2_url?: string | null
+  photo3_url?: string | null
   bio?: string
   tonight_status?: string
 }

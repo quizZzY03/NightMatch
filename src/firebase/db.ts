@@ -1,7 +1,7 @@
 import {
   doc, getDoc, setDoc, updateDoc,
   collection, query, where, onSnapshot, addDoc,
-  serverTimestamp, orderBy, limit, getDocs, DocumentData,
+  serverTimestamp, orderBy, limit, getDocs, DocumentData, deleteField,
 } from 'firebase/firestore'
 import { db, FIREBASE_CONFIGURED } from './config'
 import * as local from '../utils/storage'
@@ -20,7 +20,7 @@ export async function saveUser(uid: string, data: Partial<User>): Promise<User> 
   const ref = doc(db, 'users', uid)
   const snap = await getDoc(ref)
   if (snap.exists()) {
-    await updateDoc(ref, { ...data, updated_at: serverTimestamp() })
+    await updateDoc(ref, { ...data, is_demo: deleteField(), updated_at: serverTimestamp() })
   } else {
     await setDoc(ref, { ...data, id: uid, created_at: serverTimestamp(), updated_at: serverTimestamp() })
   }
@@ -71,13 +71,35 @@ export async function checkIn(venueId: string, user: User): Promise<Checkin> {
   }
   const ref = await addDoc(collection(db, 'checkins'), checkinData)
 
-  await updateDoc(doc(db, 'users', user.id), { current_venue_id: venueId })
+  try { await updateDoc(doc(db, 'users', user.id), { current_venue_id: venueId }) } catch { /* non-fatal */ }
 
   const venueSnap = await getDoc(doc(db, 'venues', venueId))
   const venueData = venueSnap.exists() ? (venueSnap.data() as Venue) : null
   local.checkIn(venueId, user, venueData)
 
   return { id: ref.id, ...checkinData } as unknown as Checkin
+}
+
+export async function updateCheckinProfile(userId: string, data: {
+  display_name?: string; age?: number | string; gender?: string;
+  photo1_url?: string | null; bio?: string; tonight_status?: string
+}): Promise<void> {
+  if (!FIREBASE_CONFIGURED) return
+  const snap = await getDocs(query(
+    collection(db, 'checkins'),
+    where('user_id', '==', userId),
+    where('is_active', '==', true)
+  ))
+  const patch: Record<string, unknown> = {}
+  if (data.display_name !== undefined) patch.user_name = data.display_name
+  if (data.age !== undefined) patch.user_age = data.age
+  if (data.gender !== undefined) patch.user_gender = data.gender
+  if (data.photo1_url !== undefined) patch.user_photo = data.photo1_url
+  if (data.bio !== undefined) patch.user_bio = data.bio
+  if (data.tonight_status !== undefined) patch.tonight_status = data.tonight_status
+  if (Object.keys(patch).length > 0) {
+    await Promise.all(snap.docs.map(d => updateDoc(d.ref, patch)))
+  }
 }
 
 export async function checkOut(userId: string): Promise<void> {
@@ -104,22 +126,26 @@ export function listenFeed(
     return () => {}
   }
   const sKey = sessionKey(venueId)
+  // Single-field query only — no composite index needed. Filter is_active in memory.
   const q = query(
     collection(db, 'checkins'),
     where('session_key', '==', sKey),
-    where('is_active', '==', true),
-    limit(50)
+    limit(100)
   )
   return onSnapshot(q, async snap => {
     const likedSnap = await getDocs(query(
       collection(db, 'likes'),
-      where('from_user_id', '==', currentUserId),
-      where('session_key', '==', sKey)
+      where('from_user_id', '==', currentUserId)
     ))
-    const seen = new Set(likedSnap.docs.map(d => (d.data() as DocumentData).to_user_id as string))
+    const seen = new Set(
+      likedSnap.docs
+        .filter(d => d.data().session_key === sKey)
+        .map(d => (d.data() as DocumentData).to_user_id as string)
+    )
 
     const people: FeedPerson[] = snap.docs
       .map(d => ({ id: d.id, ...(d.data() as DocumentData) }))
+      .filter(p => p.is_active !== false)
       .filter(p => p.user_id !== currentUserId && !seen.has(p.user_id as string))
       .filter(p => {
         if (preference === 'male') return p.user_gender === 'male'
@@ -146,6 +172,10 @@ export async function likePerson(fromUser: User, toUserId: string, venueId: stri
 
   await addDoc(collection(db, 'likes'), {
     from_user_id: fromUser.id,
+    from_user_name: fromUser.display_name ?? '',
+    from_user_photo: fromUser.photo1_url ?? null,
+    from_user_age: fromUser.age ?? null,
+    from_user_gender: fromUser.gender ?? null,
     to_user_id: toUserId,
     venue_id: venueId,
     session_key: sKey,
@@ -252,9 +282,44 @@ export function listenMatches(userId: string, callback: (matches: Match[]) => vo
   return () => { unsub1(); unsub2() }
 }
 
+// ── Incoming likes (who liked me) ─────────────────────────────────────────────
+export interface IncomingLike {
+  id: string
+  from_user_id: string
+  from_user_name: string
+  from_user_photo: string | null
+  from_user_age: number | null
+  from_user_gender: string | null
+  is_super_like?: boolean
+}
+
+export function listenIncomingLikes(
+  userId: string,
+  sKey: string,
+  callback: (likes: IncomingLike[]) => void
+): () => void {
+  if (!FIREBASE_CONFIGURED) return () => {}
+  const q = query(
+    collection(db, 'likes'),
+    where('to_user_id', '==', userId),
+    where('session_key', '==', sKey)
+  )
+  return onSnapshot(q, snap => {
+    callback(snap.docs.map(d => ({
+      id: d.id,
+      from_user_id: d.data().from_user_id as string,
+      from_user_name: (d.data().from_user_name as string) ?? '?',
+      from_user_photo: (d.data().from_user_photo as string | null) ?? null,
+      from_user_age: (d.data().from_user_age as number | null) ?? null,
+      from_user_gender: (d.data().from_user_gender as string | null) ?? null,
+      is_super_like: !!d.data().is_super_like,
+    })))
+  })
+}
+
 // ── Messages ──────────────────────────────────────────────────────────────────
-export function listenMessages(matchId: string, callback: (msgs: Message[]) => void): () => void {
-  if (!FIREBASE_CONFIGURED || matchId.startsWith('demo-')) {
+export function listenMessages(matchId: string, callback: (msgs: Message[]) => void, userId?: string): () => void {
+  if (!FIREBASE_CONFIGURED || matchId.startsWith('demo-') || userId === 'demo-user') {
     callback(local.getMessages(matchId))
     const interval = setInterval(() => callback(local.getMessages(matchId)), 1500)
     return () => clearInterval(interval)
@@ -275,6 +340,38 @@ export async function sendMessage(matchId: string, text: string, senderId: strin
   const ref = await addDoc(collection(db, 'messages'), msg)
   await updateDoc(doc(db, 'matches', matchId), { last_message: text, last_message_time: serverTimestamp() })
   return { id: ref.id, ...msg } as unknown as Message
+}
+
+// ── Unmatch ───────────────────────────────────────────────────────────────────
+export async function unmatchUser(matchId: string): Promise<void> {
+  if (!FIREBASE_CONFIGURED) return
+  await updateDoc(doc(db, 'matches', matchId), { is_active: false })
+}
+
+// ── Block / Report ────────────────────────────────────────────────────────────
+export async function blockUser(blockerId: string, blockedId: string): Promise<void> {
+  if (!FIREBASE_CONFIGURED) return
+  await setDoc(doc(db, 'blocks', `${blockerId}_${blockedId}`), {
+    blocker_id: blockerId,
+    blocked_id: blockedId,
+    created_at: serverTimestamp(),
+  })
+}
+
+export async function reportUser(reporterId: string, reportedId: string, reason: string): Promise<void> {
+  if (!FIREBASE_CONFIGURED) return
+  await addDoc(collection(db, 'reports'), {
+    reporter_id: reporterId,
+    reported_id: reportedId,
+    reason,
+    created_at: serverTimestamp(),
+  })
+}
+
+export async function getBlockedUserIds(userId: string): Promise<string[]> {
+  if (!FIREBASE_CONFIGURED) return []
+  const snap = await getDocs(query(collection(db, 'blocks'), where('blocker_id', '==', userId)))
+  return snap.docs.map(d => d.data().blocked_id as string)
 }
 
 // ── Live stats ────────────────────────────────────────────────────────────────

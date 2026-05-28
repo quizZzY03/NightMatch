@@ -1,7 +1,11 @@
-import { NavLink, useLocation } from 'react-router-dom'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useApp } from '../context/AppContext'
 import { t } from '../utils/i18n'
+import { checkIn as fbCheckIn } from '../firebase/db'
+import { FIREBASE_CONFIGURED } from '../firebase/config'
+import { seedTestCheckins, clearUserLikesForSession, TEST_USERS_AS_FEED, TEST_VENUE_ID } from '../utils/seedTestData'
+import { setDemoFeedPeople } from '../utils/storage'
 
 const NAV = [
   { to: '/', icon: '🏠', key: 'home' },
@@ -11,15 +15,75 @@ const NAV = [
 ]
 
 export default function Layout({ children }) {
-  const { lang, isRTL, newMatchCount } = useApp()
+  const { lang, isRTL, newMatchCount, user, checkin, refreshCheckin } = useApp()
   const loc = useLocation()
+  const navigate = useNavigate()
   const hideNav = loc.pathname.startsWith('/chat')
     || loc.pathname === '/onboarding'
     || loc.pathname === '/terms'
 
+  const isTestMode = checkin?.venue_id === TEST_VENUE_ID && user?.is_admin
+
+  async function handleTestReset() {
+    if (!user) return
+    try {
+      const isDemo = user.id === 'demo-user'
+      if (isDemo) {
+        setDemoFeedPeople(TEST_USERS_AS_FEED)
+      } else {
+        await clearUserLikesForSession(user.id, TEST_VENUE_ID)
+        if (FIREBASE_CONFIGURED) await fbCheckIn(TEST_VENUE_ID, user)
+        refreshCheckin()
+        await seedTestCheckins(TEST_VENUE_ID)
+      }
+      navigate('/feed')
+    } catch (e) {
+      console.error('Test reset failed', e)
+    }
+  }
+
+  function handleTestExit() {
+    navigate('/')
+  }
+
   return (
     <div className="flex flex-col h-full" dir={isRTL ? 'rtl' : 'ltr'}>
       <div className="shrink-0 safe-top" />
+
+      {/* Test mode banner */}
+      <AnimatePresence>
+        {isTestMode && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.25 }}
+            className="shrink-0 overflow-hidden"
+            dir="rtl"
+          >
+            <div className="flex items-center justify-between px-4 py-1.5 text-xs font-bold"
+              style={{ background: 'linear-gradient(90deg, hsl(280,100%,30%), hsl(320,100%,28%))' }}>
+              <span className="text-white/90">🧪 מצב טסט — רוטשילד 26</span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleTestReset}
+                  className="px-2.5 py-1 rounded-lg text-white/80 hover:text-white transition-colors"
+                  style={{ background: 'rgba(255,255,255,0.12)' }}
+                >
+                  🔄 אפס
+                </button>
+                <button
+                  onClick={handleTestExit}
+                  className="px-2.5 py-1 rounded-lg text-white/80 hover:text-white transition-colors"
+                  style={{ background: 'rgba(255,255,255,0.12)' }}
+                >
+                  ✕ צא
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Main content */}
       <div className="flex-1 overflow-hidden relative min-h-0">

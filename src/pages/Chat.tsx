@@ -6,7 +6,7 @@ import { t } from '../utils/i18n'
 import Avatar from '../components/Avatar'
 import { CountdownTimerCompact } from '../components/CountdownTimer'
 import { getMatchById } from '../utils/storage'
-import { listenMessages, sendMessage } from '../firebase/db'
+import { listenMessages, sendMessage, unmatchUser, blockUser, reportUser } from '../firebase/db'
 import type { Match, Message } from '../types'
 
 export default function Chat() {
@@ -16,6 +16,9 @@ export default function Chat() {
   const [msgs, setMsgs] = useState<Message[]>([])
   const [text, setText] = useState('')
   const [match, setMatch] = useState<Match | null>(null)
+  const [showMenu, setShowMenu] = useState(false)
+  const [reportReason, setReportReason] = useState('')
+  const [showReport, setShowReport] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -25,9 +28,9 @@ export default function Chat() {
   }, [matchId, matches])
 
   useEffect(() => {
-    const unsub = listenMessages(matchId, setMsgs)
+    const unsub = listenMessages(matchId, setMsgs, user?.id)
     return unsub
-  }, [matchId])
+  }, [matchId, user?.id])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -43,6 +46,30 @@ export default function Chat() {
     const msg = await sendMessage(matchId, content, user.id, user.display_name)
     // Optimistic update — real-time listener will also fire in Firebase mode
     if (msg) setMsgs(prev => [...prev, msg])
+  }
+
+  async function handleUnmatch() {
+    if (!matchId || !window.confirm(lang === 'he' ? 'לבטל את ההתאמה?' : 'Unmatch this person?')) return
+    await unmatchUser(matchId)
+    navigate('/matches')
+  }
+
+  async function handleBlock() {
+    if (!user || !match) return
+    const otherId = match.user1_id === user.id ? match.user2_id : match.user1_id
+    if (!window.confirm(lang === 'he' ? 'לחסום משתמש זה?' : 'Block this user?')) return
+    await blockUser(user.id, otherId)
+    await unmatchUser(matchId!)
+    navigate('/matches')
+  }
+
+  async function handleReport() {
+    if (!user || !match || !reportReason.trim()) return
+    const otherId = match.user1_id === user.id ? match.user2_id : match.user1_id
+    await reportUser(user.id, otherId, reportReason.trim())
+    setShowReport(false)
+    setReportReason('')
+    alert(lang === 'he' ? 'הדיווח נשלח. תודה.' : 'Report sent. Thank you.')
   }
 
   function shareInstagram() {
@@ -70,17 +97,72 @@ export default function Chat() {
           <h2 className="font-bold text-white text-sm truncate">{otherName}</h2>
           {match.venue_name && <p className="text-xs text-white/30 truncate">📍 {match.venue_name}</p>}
         </div>
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
           <span className="text-[10px] text-white/30">⏱</span>
           <CountdownTimerCompact />
+          <div className="relative">
+            <button onClick={() => setShowMenu(v => !v)}
+              className="w-8 h-8 flex items-center justify-center rounded-full text-white/40 hover:text-white hover:bg-white/10 transition-colors text-lg">
+              ⋯
+            </button>
+            {showMenu && (
+              <motion.div initial={{ opacity: 0, scale: 0.9, y: -4 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+                className="absolute top-9 right-0 z-50 rounded-2xl overflow-hidden min-w-[160px] shadow-2xl"
+                style={{ background: '#1a0a2e', border: '1px solid rgba(255,255,255,0.12)' }}>
+                <button onClick={() => { setShowMenu(false); handleUnmatch() }}
+                  className="w-full px-4 py-3 text-sm text-left text-red-400 hover:bg-white/5 transition-colors flex items-center gap-2">
+                  💔 {lang === 'he' ? 'בטל התאמה' : 'Unmatch'}
+                </button>
+                <button onClick={() => { setShowMenu(false); setShowReport(true) }}
+                  className="w-full px-4 py-3 text-sm text-left text-white/50 hover:bg-white/5 transition-colors flex items-center gap-2">
+                  🚩 {lang === 'he' ? 'דווח' : 'Report'}
+                </button>
+                <button onClick={() => { setShowMenu(false); handleBlock() }}
+                  className="w-full px-4 py-3 text-sm text-left text-orange-400 hover:bg-white/5 transition-colors flex items-center gap-2">
+                  🚫 {lang === 'he' ? 'חסום' : 'Block'}
+                </button>
+              </motion.div>
+            )}
+          </div>
         </div>
       </div>
+
+      {/* Report dialog */}
+      {showReport && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+          className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center px-6"
+          onClick={() => setShowReport(false)}>
+          <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }}
+            className="w-full max-w-sm rounded-2xl p-5 space-y-3"
+            style={{ background: '#1a0a2e', border: '1px solid rgba(255,255,255,0.12)' }}
+            onClick={e => e.stopPropagation()}>
+            <h3 className="font-bold text-white">{lang === 'he' ? 'דיווח על משתמש' : 'Report User'}</h3>
+            <textarea value={reportReason} onChange={e => setReportReason(e.target.value)} rows={3}
+              placeholder={lang === 'he' ? 'תאר את הסיבה...' : 'Describe the reason...'}
+              className="w-full rounded-xl px-3 py-2 text-sm text-white bg-white/5 border border-white/15 outline-none focus:border-[hsl(290,100%,65%)] resize-none" />
+            <div className="flex gap-2">
+              <button onClick={() => setShowReport(false)}
+                className="flex-1 py-2.5 rounded-xl text-sm text-white/50 border border-white/10">
+                {lang === 'he' ? 'ביטול' : 'Cancel'}
+              </button>
+              <button onClick={handleReport} disabled={!reportReason.trim()}
+                className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white disabled:opacity-40"
+                style={{ background: 'linear-gradient(135deg, hsl(290,100%,65%), hsl(320,100%,60%))' }}>
+                {lang === 'he' ? 'שלח דיווח' : 'Send Report'}
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
 
       {/* Match banner */}
       <div className="glass-card border-b border-[hsl(290,100%,65%,0.2)] rounded-none px-4 py-2 text-center shrink-0"
         style={{ background: 'linear-gradient(90deg, hsl(290,100%,65%,0.1), hsl(320,100%,60%,0.1))' }}>
         <p className="text-xs text-white/50">
-          🔥 {lang === 'he' ? `אתם מאצ׳ים מ` : 'You matched at'} <span className="text-[hsl(290,100%,65%)]">{match.venue_name}</span>
+          🔥 {lang === 'he'
+            ? <>{`התאמתם הלילה ב`}<span className="text-[hsl(290,100%,65%)]">{match.venue_name || 'הלילה'}</span></>
+            : <>{'You matched at '}<span className="text-[hsl(290,100%,65%)]">{match.venue_name || 'tonight'}</span></>
+          }
         </p>
       </div>
 
@@ -111,12 +193,12 @@ export default function Chat() {
         <div ref={bottomRef} />
       </div>
 
-      {/* Quick replies */}
+      {/* Quick replies — always visible, scrollable */}
       <div className="px-3 pb-1 shrink-0">
         <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
-          {t(lang, 'quickReplies').map(qr => (
+          {(t(lang, 'quickReplies') as string[]).map(qr => (
             <button key={qr} onClick={() => handleSend(qr)}
-              className="shrink-0 text-xs glass-card border border-white/10 rounded-full px-3 py-1.5 text-white/60 hover:text-white hover:border-white/30 transition-colors whitespace-nowrap">
+              className="shrink-0 text-xs glass-card border border-white/10 rounded-full px-3 py-1.5 text-white/60 hover:text-white hover:border-[hsl(290,100%,65%,0.5)] transition-colors whitespace-nowrap">
               {qr}
             </button>
           ))}

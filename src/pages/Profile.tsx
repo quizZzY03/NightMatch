@@ -5,10 +5,16 @@ import { useApp } from '../context/AppContext'
 import { t } from '../utils/i18n'
 import NeonButton from '../components/NeonButton'
 import Avatar from '../components/Avatar'
+import { useToast } from '../components/Toast'
 import { signOut as localSignOut } from '../utils/storage'
 import { signOut as fbSignOut } from '../firebase/auth'
+import { checkIn as fbCheckIn, updateCheckinProfile } from '../firebase/db'
+import { FIREBASE_CONFIGURED } from '../firebase/config'
 import { seedTestCheckins, clearTestCheckins } from '../utils/seedTestData'
 import { compressToBase64 } from '../utils/imageUtils'
+import { uploadProfilePhoto } from '../firebase/storage'
+
+const TEST_VENUE_ID = 'rotch-rishon'
 
 type PhotoSlot = 1 | 2 | 3
 
@@ -23,8 +29,9 @@ interface ProfileForm {
 }
 
 export default function Profile() {
-  const { lang, toggleLang, user, updateUser, isRTL } = useApp()
+  const { lang, toggleLang, user, updateUser, isRTL, checkin, refreshCheckin } = useApp()
   const navigate = useNavigate()
+  const toast = useToast()
   const [form, setForm] = useState<ProfileForm>({
     display_name: user?.display_name || '',
     age: user?.age || '',
@@ -35,7 +42,6 @@ export default function Profile() {
     instagram_handle: user?.instagram_handle || '',
   })
   const [saved, setSaved] = useState(false)
-  const [showDevTools, setShowDevTools] = useState(false)
   const [seedStatus, setSeedStatus] = useState('')
   const [uploadingSlot, setUploadingSlot] = useState<PhotoSlot | null>(null)
   const devPressRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -45,18 +51,26 @@ export default function Profile() {
     useRef<HTMLInputElement>(null),
   ]
 
-  function startDevPress() {
-    devPressRef.current = setTimeout(() => setShowDevTools(v => !v), 2000)
-  }
-  function cancelDevPress() {
-    if (devPressRef.current) clearTimeout(devPressRef.current)
+  async function handleTestMode() {
+    if (!user) return
+    setSeedStatus('⏳ מכין סביבת טסט...')
+    try {
+      if (FIREBASE_CONFIGURED) await fbCheckIn(TEST_VENUE_ID, user)
+      refreshCheckin()
+      await seedTestCheckins(TEST_VENUE_ID)
+      setSeedStatus('✅ מוכן! עובר לפיד...')
+      setTimeout(() => navigate('/feed'), 600)
+    } catch (e) {
+      setSeedStatus('❌ שגיאה: ' + (e as Error).message)
+    }
   }
 
   async function handleSeed() {
+    if (!checkin?.venue_id) { setSeedStatus('⚠️ התחבר למקום קודם'); return }
     setSeedStatus('⏳ זורע...')
     try {
-      const n = await seedTestCheckins()
-      setSeedStatus(`✅ נוצרו ${n} משתמשי טסט`)
+      const n = await seedTestCheckins(checkin.venue_id)
+      setSeedStatus(`✅ נוצרו ${n} משתמשי טסט ב-${checkin.venue_id}`)
     } catch (e) {
       setSeedStatus('❌ שגיאה: ' + (e as Error).message)
     }
@@ -65,7 +79,7 @@ export default function Profile() {
   async function handleClearSeed() {
     setSeedStatus('⏳ מנקה...')
     try {
-      const n = await clearTestCheckins()
+      const n = await clearTestCheckins(checkin?.venue_id)
       setSeedStatus(`🗑️ נמחקו ${n} משתמשי טסט`)
     } catch (e) {
       setSeedStatus('❌ שגיאה: ' + (e as Error).message)
@@ -74,15 +88,23 @@ export default function Profile() {
 
   const up = <K extends keyof ProfileForm>(k: K, v: ProfileForm[K]) => setForm(f => ({ ...f, [k]: v }))
 
-  function handleSave() {
-    updateUser({
-      ...form,
-      tonight_status: Array.isArray(form.tonight_status)
-        ? form.tonight_status.join(' · ')
-        : form.tonight_status,
-    })
+  async function handleSave() {
+    const tonight_status = Array.isArray(form.tonight_status)
+      ? form.tonight_status.join(' · ')
+      : form.tonight_status
+    await updateUser({ ...form, tonight_status })
+    if (user?.id && user.id !== 'demo-user') {
+      updateCheckinProfile(user.id, {
+        display_name: form.display_name,
+        age: form.age,
+        gender: form.gender,
+        bio: form.bio,
+        tonight_status,
+      }).catch(() => {})
+    }
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
+    toast(lang === 'he' ? 'הפרופיל נשמר בהצלחה' : 'Profile saved!', 'success')
   }
 
   async function handlePhoto(index: number, e: React.ChangeEvent<HTMLInputElement>) {
@@ -92,10 +114,20 @@ export default function Profile() {
     const photoKey = `photo${slot}_url` as 'photo1_url' | 'photo2_url' | 'photo3_url'
     setUploadingSlot(slot)
     try {
-      const compressed = await compressToBase64(file)
-      void updateUser({ [photoKey]: compressed })
+      let photoUrl: string
+      if (FIREBASE_CONFIGURED && user?.id && user.id !== 'demo-user') {
+        photoUrl = await uploadProfilePhoto(user.id, file, slot)
+      } else {
+        photoUrl = await compressToBase64(file)
+      }
+      void updateUser({ [photoKey]: photoUrl })
+      if (user?.id && user.id !== 'demo-user') {
+        updateCheckinProfile(user.id, { photo1_url: slot === 1 ? photoUrl : undefined }).catch(() => {})
+      }
+      toast(lang === 'he' ? 'התמונה עודכנה!' : 'Photo updated!', 'success')
     } catch (err) {
-      console.error('Photo compression failed:', err)
+      console.error('Photo upload failed:', err)
+      toast(lang === 'he' ? 'שגיאה בהעלאת תמונה' : 'Photo upload failed', 'error')
     } finally {
       setUploadingSlot(null)
     }
@@ -115,9 +147,7 @@ export default function Profile() {
 
         {/* Header */}
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-between">
-          <h1 className="text-2xl font-black text-white select-none"
-            onMouseDown={startDevPress} onMouseUp={cancelDevPress} onMouseLeave={cancelDevPress}
-            onTouchStart={startDevPress} onTouchEnd={cancelDevPress}>
+          <h1 className="text-2xl font-black text-white">
             👤 {t(lang, 'profile')}
           </h1>
           <button onClick={toggleLang} className="glass-card border border-white/15 px-3 py-1.5 rounded-full text-xs text-white/50 hover:text-white transition-colors">
@@ -186,7 +216,7 @@ export default function Profile() {
               <div className="relative">
                 <textarea value={String(form[key] ?? '')} onChange={e => up(key, e.target.value)} rows={3} maxLength={maxLength}
                   className="w-full glass-card border border-white/15 rounded-xl px-4 py-3 text-white placeholder-white/25 outline-none focus:border-[hsl(290,100%,65%)] transition-colors bg-transparent resize-none text-sm" />
-                {maxLength && <span className="absolute bottom-2 left-3 text-[10px] text-white/20">{String(form[key] ?? '').length}/{maxLength}</span>}
+                {maxLength && <span className={`absolute bottom-2 ${isRTL ? 'right-3' : 'left-3'} text-[10px] text-white/20`}>{String(form[key] ?? '').length}/{maxLength}</span>}
               </div>
             ) : (
               <div className="relative">
@@ -251,17 +281,25 @@ export default function Profile() {
           {saved ? (lang === 'he' ? '✓ נשמר!' : '✓ Saved!') : t(lang, 'save')}
         </NeonButton>
 
-        {/* Dev tools */}
-        {(showDevTools || user?.is_test_account) && (
+        {/* Dev tools — admin only */}
+        {user?.is_admin && (
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
             className="rounded-2xl p-4 space-y-3"
             style={{ background: 'rgba(255,200,0,0.07)', border: '1px dashed rgba(255,200,0,0.3)' }}>
             <p className="text-xs text-yellow-400/70 font-mono text-center">🛠 DEV TOOLS</p>
+
+            {/* Quick test mode */}
+            <button onClick={handleTestMode}
+              className="w-full py-3 rounded-xl text-sm font-bold text-white transition-all"
+              style={{ background: 'linear-gradient(135deg, hsl(290,100%,40%), hsl(320,100%,35%))', border: '1px solid hsl(290,100%,65%,0.4)', boxShadow: '0 0 16px hsl(290,100%,65%,0.2)' }}>
+              ⚡ סביבת טסט מהירה — צ׳ק-אין + 10 משתמשים + פיד
+            </button>
+
             <div className="flex gap-2">
               <button onClick={handleSeed}
                 className="flex-1 py-2.5 rounded-xl text-xs font-semibold text-yellow-300 transition-all"
                 style={{ background: 'rgba(255,200,0,0.12)', border: '1px solid rgba(255,200,0,0.25)' }}>
-                🧪 זרע 10 משתמשי טסט
+                🧪 צור 10 משתמשי טסט
               </button>
               <button onClick={handleClearSeed}
                 className="flex-1 py-2.5 rounded-xl text-xs font-semibold text-red-400 transition-all"

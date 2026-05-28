@@ -11,9 +11,8 @@ import { getVenueById as fbGetVenueById, checkIn as fbCheckIn, checkOut as fbChe
 import { FIREBASE_CONFIGURED } from '../firebase/config'
 import { isOperatingHours, nextOpeningTime } from '../utils/geo'
 import { PRODUCTION_VENUES, seedProductionVenues } from '../utils/seedVenues'
+import { ADMIN_UID } from '../config/admin'
 import type { Venue } from '../types'
-
-const ADMIN_UID = 'l6dNiPruVDRF1HgOu2L5ffEpsCC3'
 
 export default function CheckIn() {
   const { lang, user, checkin, refreshCheckin, isRTL } = useApp()
@@ -242,7 +241,7 @@ export default function CheckIn() {
             lang={lang}
             onSuccess={handleVerifySuccess}
             onCancel={() => setSelectedVenue(null)}
-            devBypass={user?.id === ADMIN_UID || !!user?.is_test_account}
+            devBypass={user?.is_admin}
           />
         )}
       </AnimatePresence>

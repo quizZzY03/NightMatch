@@ -4,9 +4,8 @@ import { onAuthStateChanged } from '../firebase/auth'
 import { getUser, saveUser as fbSaveUser, listenMatches } from '../firebase/db'
 import { FIREBASE_CONFIGURED } from '../firebase/config'
 import { getCurrentUser, saveUser as localSaveUser, getActiveCheckin } from '../utils/storage'
+import { ADMIN_UID } from '../config/admin'
 import type { User, Checkin, Match, Lang, AppContextValue } from '../types'
-
-const TEST_PHONE = '+972500000000'
 
 const AppContext = createContext<AppContextValue | null>(null)
 
@@ -20,6 +19,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [initialized, setInitialized] = useState(false)
 
   useEffect(() => {
+    // DEV-only QA bypass: set localStorage.nightmatch_qa_bypass=true to skip Firebase auth
+    if (import.meta.env.DEV && localStorage.getItem('nightmatch_qa_bypass') === 'true') {
+      setFirebaseUser({ uid: 'qa-test-user' } as FirebaseUser)
+      return
+    }
     const unsub = onAuthStateChanged(fbUser => {
       setFirebaseUser(fbUser ?? null)
     })
@@ -29,24 +33,47 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (firebaseUser === undefined) return
 
+    if (firebaseUser === null) {
+      // User signed out — clear state immediately so stale admin flags don't bleed into next session
+      setUser(null)
+      setMatches([])
+      setInitialized(true)
+      return
+    }
+
     async function load() {
+      setUser(null)
+      const isAdmin = FIREBASE_CONFIGURED && (firebaseUser as FirebaseUser).uid === ADMIN_UID
+      let profile: User | null = null
       try {
-        let profile: User | null = null
-        if (FIREBASE_CONFIGURED && firebaseUser && !(firebaseUser as FirebaseUser & { is_demo?: boolean }).is_demo) {
-          profile = await getUser(firebaseUser.uid)
+        const isQaBypassed = import.meta.env.DEV && localStorage.getItem('nightmatch_qa_bypass') === 'true'
+        if (FIREBASE_CONFIGURED && !isQaBypassed && !(firebaseUser as FirebaseUser & { is_demo?: boolean }).is_demo) {
+          profile = await getUser((firebaseUser as FirebaseUser).uid)
+          // Firestore returned nothing — fall back to localStorage
+          if (!profile) profile = getCurrentUser()
         } else {
           profile = getCurrentUser()
         }
-        if (profile) {
-          const isTest = FIREBASE_CONFIGURED && (firebaseUser as FirebaseUser | null)?.phoneNumber === TEST_PHONE
-          const enriched: User = isTest ? { ...profile, is_test_account: true } : profile
+      } catch (e) {
+        console.error('AppContext load error:', e)
+        // Firestore failed — fall back to localStorage
+        profile = getCurrentUser()
+      } finally {
+        // Admin always bypasses onboarding — merge or create minimal profile
+        if (isAdmin) {
+          profile = {
+            ...(profile ?? {}),
+            id: (firebaseUser as FirebaseUser).uid,
+            display_name: profile?.display_name || ((firebaseUser as FirebaseUser & { displayName?: string }).displayName) || 'Admin',
+            onboarding_complete: true,
+          } as User
+        }
+        if (profile && !profile.is_demo) {
+          const enriched: User = { ...profile, is_admin: isAdmin }
           setUser(enriched)
           if (enriched.language) setLang(enriched.language)
         }
         setCheckin(getActiveCheckin())
-      } catch (e) {
-        console.error('AppContext load error:', e)
-      } finally {
         setInitialized(true)
       }
     }
@@ -73,6 +100,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updated = { ...user, ...data, id: uid } as User
       setUser(updated)
       if (data.language) setLang(data.language)
+      localSaveUser({ ...data, id: uid }) // backup to localStorage
       try { await fbSaveUser(uid, data) } catch (e) { console.error('Firebase save failed:', (e as Error).message) }
     } else {
       updated = localSaveUser(data)
@@ -93,6 +121,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const clearNewMatchCount = useCallback(() => setNewMatchCount(0), [])
 
   const onAuthSuccess = useCallback(async (fbUser: FirebaseUser): Promise<void> => {
+    setUser(null) // clear any stale state before loading new profile
     setFirebaseUser(fbUser)
     let profile: User | null = null
     if (FIREBASE_CONFIGURED) {
@@ -100,9 +129,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } else {
       profile = getCurrentUser()
     }
-    if (profile) {
-      const isTest = FIREBASE_CONFIGURED && fbUser.phoneNumber === TEST_PHONE
-      const enriched: User = isTest ? { ...profile, is_test_account: true } : profile
+    if (profile && !profile.is_demo) {
+      const isAdmin = FIREBASE_CONFIGURED && fbUser.uid === ADMIN_UID
+      const enriched: User = { ...profile, is_admin: isAdmin }
       setUser(enriched)
       if (enriched.language) setLang(enriched.language)
     }
@@ -119,7 +148,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       initialized,
       isRTL: lang === 'he',
       needsAuth: firebaseUser === null,
-      needsOnboarding: initialized && !user?.onboarding_complete,
+      needsOnboarding: initialized && !user?.onboarding_complete && !user?.is_admin,
       updateUser,
       refreshCheckin,
       toggleLang,

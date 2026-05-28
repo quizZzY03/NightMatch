@@ -38,6 +38,14 @@
       "collectionGroup": "checkins",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "session_key", "order": "ASCENDING" },
+        { "fieldPath": "is_test",     "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "checkins",
+      "queryScope": "COLLECTION",
+      "fields": [
         { "fieldPath": "user_id",   "order": "ASCENDING" },
         { "fieldPath": "is_active", "order": "ASCENDING" }
       ]
@@ -48,6 +56,14 @@
       "fields": [
         { "fieldPath": "from_user_id", "order": "ASCENDING" },
         { "fieldPath": "session_key",  "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "likes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "to_user_id",  "order": "ASCENDING" },
+        { "fieldPath": "session_key", "order": "ASCENDING" }
       ]
     },
     {

@@ -8,25 +8,21 @@ const GENDER_COLORS = {
   other: 'from-[hsl(130,80%,30%)] to-[hsl(185,100%,30%)]',
 }
 
-export default function SwipeCard({ person, onLike, onPass, onSuperLike, isTop, index, lang }) {
+export default function SwipeCard({ person, onLike, onPass, onSuperLike, onTap, isTop, index, lang }) {
   const x = useMotionValue(0)
-  const y = useMotionValue(0)
   const rotate = useTransform(x, [-220, 220], [-22, 22])
   const likeOpacity = useTransform(x, [30, 120], [0, 1])
   const passOpacity = useTransform(x, [-120, -30], [1, 0])
-  const superOpacity = useTransform(y, [-120, -30], [1, 0])
   const [dragging, setDragging] = useState(false)
   const [hasDragged, setHasDragged] = useState(() => !!sessionStorage.getItem('nm_dragged'))
+  const didDragRef = useRef(false)
 
   const THRESHOLD = 110
-  const SUPER_THRESHOLD = 100
 
   async function handleDragEnd(_, info) {
     setDragging(false)
-    if (info.offset.y < -SUPER_THRESHOLD && Math.abs(info.offset.x) < 80) {
-      await animate(y, -700, { duration: 0.28 })
-      onSuperLike?.(person)
-    } else if (info.offset.x > THRESHOLD) {
+    if (Math.abs(info.offset.x) > 8) didDragRef.current = true
+    if (info.offset.x > THRESHOLD) {
       await animate(x, 650, { duration: 0.28 })
       onLike(person)
     } else if (info.offset.x < -THRESHOLD) {
@@ -34,8 +30,8 @@ export default function SwipeCard({ person, onLike, onPass, onSuperLike, isTop, 
       onPass(person)
     } else {
       animate(x, 0, { type: 'spring', stiffness: 320, damping: 22 })
-      animate(y, 0, { type: 'spring', stiffness: 320, damping: 22 })
     }
+    setTimeout(() => { didDragRef.current = false }, 50)
   }
 
   const scale = isTop ? 1 : Math.max(0.88, 1 - index * 0.05)
@@ -45,12 +41,13 @@ export default function SwipeCard({ person, onLike, onPass, onSuperLike, isTop, 
   return (
     <motion.div
       className="absolute inset-0 swipe-card"
-      style={{ x, y, rotate, scale, zIndex: 10 - index, top: yOffset, transformOrigin: 'bottom center' }}
+      style={{ x, rotate, scale, zIndex: 10 - index, top: yOffset, transformOrigin: 'bottom center' }}
       drag={isTop}
       dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
       dragElastic={0.65}
-      onDragStart={() => { setDragging(true); setHasDragged(true); sessionStorage.setItem('nm_dragged', '1') }}
+      onDragStart={() => { setDragging(true); setHasDragged(true); didDragRef.current = false; sessionStorage.setItem('nm_dragged', '1') }}
       onDragEnd={handleDragEnd}
+      onClick={() => { if (!didDragRef.current && onTap) onTap(person) }}
     >
       <div className="relative w-full h-full rounded-[28px] overflow-hidden"
         style={{ boxShadow: isTop ? '0 24px 64px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.06)' : '0 8px 24px rgba(0,0,0,0.4)' }}>
@@ -58,7 +55,7 @@ export default function SwipeCard({ person, onLike, onPass, onSuperLike, isTop, 
         {/* Photo or gradient avatar */}
         {person.photo1_url ? (
           <img src={person.photo1_url} alt={person.display_name}
-            className="absolute inset-0 w-full h-full object-cover" />
+            className="absolute inset-0 w-full h-full object-cover object-top" />
         ) : (
           <div className={`absolute inset-0 bg-gradient-to-br ${gradientClass}`} />
         )}
@@ -67,7 +64,7 @@ export default function SwipeCard({ person, onLike, onPass, onSuperLike, isTop, 
         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
         <div className="absolute inset-0 bg-gradient-to-br from-[hsl(290,100%,65%,0.08)] to-transparent" />
 
-        {/* LIKE stamp */}
+        {/* LIKE stamp — right swipe */}
         {isTop && (
           <motion.div style={{ opacity: likeOpacity }}
             className="absolute top-10 left-6 rotate-[-28deg] border-[3px] border-green-400 rounded-2xl px-4 py-1.5 pointer-events-none">
@@ -76,7 +73,7 @@ export default function SwipeCard({ person, onLike, onPass, onSuperLike, isTop, 
           </motion.div>
         )}
 
-        {/* NOPE stamp */}
+        {/* NOPE stamp — left swipe */}
         {isTop && (
           <motion.div style={{ opacity: passOpacity }}
             className="absolute top-10 right-6 rotate-[28deg] border-[3px] border-red-400 rounded-2xl px-4 py-1.5 pointer-events-none">
@@ -85,15 +82,6 @@ export default function SwipeCard({ person, onLike, onPass, onSuperLike, isTop, 
           </motion.div>
         )}
 
-        {/* SUPER stamp */}
-        {isTop && (
-          <motion.div
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 border-[3px] rounded-2xl px-5 py-2 pointer-events-none"
-            style={{ borderColor: 'hsl(45,100%,55%)', opacity: superOpacity }}>
-            <span className="font-black text-2xl tracking-[0.15em]"
-              style={{ color: 'hsl(45,100%,55%)', textShadow: '0 0 16px hsl(45,100%,55%,0.9)' }}>SUPER ⭐</span>
-          </motion.div>
-        )}
 
         {/* Info */}
         <div className="absolute bottom-0 inset-x-0 p-5 space-y-2">
@@ -126,7 +114,7 @@ export default function SwipeCard({ person, onLike, onPass, onSuperLike, isTop, 
           </div>
         </div>
 
-        {/* Subtle drag hint on first card — disappears permanently after first drag */}
+        {/* Drag hint — only on first card before first drag */}
         {isTop && !dragging && !hasDragged && (
           <div className="absolute top-4 inset-x-0 flex justify-center pointer-events-none">
             <motion.div
@@ -136,6 +124,14 @@ export default function SwipeCard({ person, onLike, onPass, onSuperLike, isTop, 
               {lang === 'he' ? 'גרור לסווייפ' : 'drag to swipe'}
             </motion.div>
           </div>
+        )}
+
+        {/* Super like ring — shown via prop */}
+        {isTop && dragging && (
+          <motion.div
+            className="absolute inset-0 rounded-[28px] pointer-events-none"
+            animate={{ boxShadow: '0 0 0 3px rgba(250,204,21,0)' }}
+          />
         )}
       </div>
     </motion.div>

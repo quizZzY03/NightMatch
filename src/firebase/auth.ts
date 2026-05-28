@@ -5,6 +5,7 @@ import {
   GoogleAuthProvider,
   OAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
   sendSignInLinkToEmail,
   isSignInWithEmailLink,
   signInWithEmailLink,
@@ -72,10 +73,19 @@ export async function completeEmailLink(): Promise<User | null> {
   return result.user
 }
 
+function isMobile(): boolean {
+  return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+    window.matchMedia('(display-mode: standalone)').matches
+}
+
 export async function signInWithGoogle(): Promise<User> {
   if (!FIREBASE_CONFIGURED) throw new Error('Firebase not configured')
   const provider = new GoogleAuthProvider()
   provider.setCustomParameters({ prompt: 'select_account' })
+  if (isMobile()) {
+    await signInWithRedirect(auth, provider)
+    return {} as User // page navigates away — never reached
+  }
   const result = await signInWithPopup(auth, provider)
   return result.user
 }

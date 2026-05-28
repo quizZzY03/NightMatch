@@ -1,54 +1,66 @@
-const CACHE_NAME = 'nightmatch-v2';
+const CACHE_NAME = 'nightmatch-v4';
 
-// Core shell assets to pre-cache
 const PRECACHE = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
-// Install — cache core shell
 self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE_NAME).then(c => c.addAll(PRECACHE)).then(() => self.skipWaiting())
   );
 });
 
-// Activate — remove old caches
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys()
       .then(keys => Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))))
       .then(() => self.clients.claim())
+      .then(() => self.clients.matchAll({ type: 'window', includeUncontrolled: true }))
+      .then(clients => {
+        // Force all open tabs to reload so they pick up new JS bundles
+        for (const client of clients) {
+          client.navigate(client.url);
+        }
+      })
   );
 });
 
-// Fetch strategy:
-// - JS/CSS/fonts: stale-while-revalidate
-// - Images: cache-first
-// - Firebase/API: network-only
-// - HTML: network-first with offline fallback
 self.addEventListener('fetch', e => {
   const { request } = e;
   if (request.method !== 'GET') return;
 
   const url = new URL(request.url);
 
-  // Skip Firebase and external API calls
+  // Skip Firebase and external API calls — always network
   if (url.hostname.includes('firestore') ||
       url.hostname.includes('firebase') ||
       url.hostname.includes('googleapis') ||
       url.hostname.includes('randomuser.me')) {
-    return; // let it go to network directly
+    return;
   }
 
-  // JS/CSS assets (hashed filenames) — stale-while-revalidate
+  // HTML — always network-first, never serve stale HTML
+  if (request.destination === 'document' || url.pathname === '/' || url.pathname.endsWith('.html')) {
+    e.respondWith(
+      fetch(request)
+        .then(res => {
+          const clone = res.clone();
+          caches.open(CACHE_NAME).then(c => c.put(request, clone));
+          return res;
+        })
+        .catch(() => caches.match('/index.html'))
+    );
+    return;
+  }
+
+  // JS/CSS assets (hashed filenames) — network-first so new deploys are always fresh
   if (url.pathname.startsWith('/assets/')) {
     e.respondWith(
-      caches.open(CACHE_NAME).then(async cache => {
-        const cached = await cache.match(request);
-        const networkPromise = fetch(request).then(res => {
-          cache.put(request, res.clone());
+      fetch(request)
+        .then(res => {
+          const clone = res.clone();
+          caches.open(CACHE_NAME).then(c => c.put(request, clone));
           return res;
-        }).catch(() => cached);
-        return cached || networkPromise;
-      })
+        })
+        .catch(() => caches.match(request))
     );
     return;
   }
@@ -68,14 +80,12 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // HTML — network-first, offline fallback to index.html
+  // Everything else — network with cache fallback
   e.respondWith(
-    fetch(request)
-      .catch(() => caches.match('/index.html'))
+    fetch(request).catch(() => caches.match(request))
   );
 });
 
-// Push notifications
 self.addEventListener('push', e => {
   if (!e.data) return;
   let data = {};

@@ -100,7 +100,8 @@ export function getFeedPeople(venueId: string, filter = 'all'): FeedPerson[] {
   const liked = get<string[]>('liked_ids') ?? []
   const passed = get<string[]>('passed_ids') ?? []
   const seen = [...liked, ...passed]
-  return MOCK_PEOPLE.filter(p => {
+  const pool = get<FeedPerson[]>('demo_feed_people') ?? MOCK_PEOPLE
+  return pool.filter(p => {
     if (p.id === user?.id) return false
     if (seen.includes(p.id)) return false
     if (filter === 'male' && p.gender !== 'male') return false
@@ -253,4 +254,14 @@ export function resetForNewDay(): void {
   del('active_checkin'); del('liked_ids'); del('passed_ids'); del('matches'); del('super_likes')
   const user = getCurrentUser()
   if (user) set('user', { ...user, current_venue_id: null })
+}
+
+export function setDemoFeedPeople(people: FeedPerson[]): void {
+  set('demo_feed_people', people)
+  del('liked_ids')
+  del('passed_ids')
+}
+
+export function clearDemoFeedPeople(): void {
+  del('demo_feed_people')
 }

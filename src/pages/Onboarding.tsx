@@ -6,6 +6,9 @@ import NeonButton from '../components/NeonButton'
 import { t } from '../utils/i18n'
 import { checkOut } from '../utils/storage'
 import { compressToBase64 } from '../utils/imageUtils'
+import { uploadProfilePhoto } from '../firebase/storage'
+import { signOut } from '../firebase/auth'
+import { FIREBASE_CONFIGURED } from '../firebase/config'
 import type { Lang } from '../types'
 
 const STEPS = ['welcome', 'profile', 'status', 'photo', 'done']
@@ -18,19 +21,22 @@ interface OnboardingData {
   tonight_status: string[]
   preference: string
   photo1_url: string
+  photo2_url: string
+  photo3_url: string
 }
 
 export default function Onboarding() {
-  const { lang, toggleLang, updateUser, refreshCheckin, isRTL, user } = useApp()
+  const { lang, toggleLang, updateUser, refreshCheckin, isRTL, user, firebaseUser } = useApp()
   const navigate = useNavigate()
   const [step, setStep] = useState(0)
   const [data, setData] = useState<OnboardingData>({
-    display_name: '', age: '', gender: '', bio: '', tonight_status: [], preference: '', photo1_url: '',
+    display_name: '', age: '', gender: '', bio: '', tonight_status: [], preference: '',
+    photo1_url: '', photo2_url: '', photo3_url: '',
   })
   const [error, setError] = useState('')
-  const [uploading, setUploading] = useState(false)
+  const [uploadingSlot, setUploadingSlot] = useState<0 | 1 | 2 | null>(null)
   const [photoError, setPhotoError] = useState('')
-  const fileRef = useRef<HTMLInputElement>(null)
+  const fileRefs = [useRef<HTMLInputElement>(null), useRef<HTMLInputElement>(null), useRef<HTMLInputElement>(null)]
 
   const up = <K extends keyof OnboardingData>(k: K, v: OnboardingData[K]) =>
     setData(d => ({ ...d, [k]: v }))
@@ -43,6 +49,10 @@ export default function Onboarding() {
       if (!data.gender) return t(lang, 'required') + ': ' + t(lang, 'gender')
     }
     if (step === 2 && data.tonight_status.length === 0) return t(lang, 'required') + ': ' + t(lang, 'tonightStatus')
+    if (step === 3) {
+      const filled = [data.photo1_url, data.photo2_url, data.photo3_url].filter(Boolean).length
+      if (filled < 3) return lang === 'he' ? `חובה להעלות 3 תמונות (${filled}/3)` : `Please upload 3 photos (${filled}/3)`
+    }
     return ''
   }
 
@@ -53,18 +63,25 @@ export default function Onboarding() {
     setStep(s => s + 1)
   }
 
-  async function handlePhoto(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handlePhoto(slot: 0 | 1 | 2, e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
     setPhotoError('')
-    setUploading(true)
+    setUploadingSlot(slot)
+    const key = `photo${slot + 1}_url` as 'photo1_url' | 'photo2_url' | 'photo3_url'
     try {
-      const compressed = await compressToBase64(file)
-      up('photo1_url', compressed)
+      const uid = firebaseUser?.uid || user?.id
+      if (FIREBASE_CONFIGURED && uid && uid !== 'demo-user') {
+        const url = await uploadProfilePhoto(uid, file, (slot + 1) as 1 | 2 | 3)
+        up(key, url)
+      } else {
+        const compressed = await compressToBase64(file)
+        up(key, compressed)
+      }
     } catch {
       setPhotoError(lang === 'he' ? 'שגיאה בטעינת התמונה — נסה שוב' : 'Failed to load image — try again')
     } finally {
-      setUploading(false)
+      setUploadingSlot(null)
     }
   }
 
@@ -126,6 +143,11 @@ export default function Onboarding() {
                 🌐 {lang === 'he' ? 'English' : 'עברית'}
               </button>
               <NeonButton variant="purple" size="lg" fullWidth onClick={next}>{t(lang, 'next')} →</NeonButton>
+              <button
+                onClick={async () => { await signOut(); window.location.reload() }}
+                className="w-full py-2 text-xs text-white/30 hover:text-white/60 transition-colors">
+                {lang === 'he' ? '↩ התחבר עם חשבון אחר' : '↩ Sign in with a different account'}
+              </button>
             </div>
           )}
 
@@ -209,40 +231,90 @@ export default function Onboarding() {
             </div>
           )}
 
-          {/* STEP 3: Photo */}
+          {/* STEP 3: Photos (3 required) */}
           {step === 3 && (
-            <div className="space-y-6 text-center">
-              <div>
-                <h2 className="text-2xl font-bold text-white mb-1">{t(lang, 'onboardingPhoto')}</h2>
-                <p className="text-sm text-white/40">{lang === 'he' ? 'פרופיל עם תמונה מקבל פי 5 יותר לייקים' : '5× more likes with a photo'}</p>
+            <div className="space-y-5">
+              <div className="text-center">
+                <h2 className="text-2xl font-bold text-white mb-1">
+                  {lang === 'he' ? '3 תמונות — חובה' : '3 Photos — Required'}
+                </h2>
+                <p className="text-sm text-white/40">
+                  {lang === 'he' ? 'פרופילים עם 3 תמונות מקבלים פי 8 יותר מאצ׳ים' : 'Profiles with 3 photos get 8× more matches'}
+                </p>
               </div>
-              <motion.div whileTap={{ scale: 0.97 }} onClick={() => fileRef.current?.click()}
-                className="w-36 h-36 mx-auto rounded-full overflow-hidden border-2 border-dashed border-[hsl(290,100%,65%,0.5)] flex items-center justify-center cursor-pointer hover:border-[hsl(290,100%,65%)] transition-colors relative"
-                style={{ background: data.photo1_url ? 'none' : 'rgba(139,92,246,0.1)' }}>
-                {data.photo1_url
-                  ? <img src={data.photo1_url} className="w-full h-full object-cover" alt="" />
-                  : <div className="text-center"><div className="text-4xl mb-1">📷</div><div className="text-xs text-white/40">{t(lang, 'uploadPhoto')}</div></div>
-                }
-                {uploading && (
-                  <div className="absolute inset-0 bg-black/60 flex items-center justify-center rounded-full">
-                    <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
+
+              {/* Progress bar */}
+              {(() => {
+                const filled = [data.photo1_url, data.photo2_url, data.photo3_url].filter(Boolean).length
+                return (
+                  <div className="flex items-center gap-2">
+                    {[0,1,2].map(i => (
+                      <div key={i} className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.1)' }}>
+                        <motion.div className="h-full rounded-full"
+                          animate={{ width: i < filled ? '100%' : '0%' }}
+                          transition={{ duration: 0.3 }}
+                          style={{ background: 'linear-gradient(90deg, hsl(290,100%,65%), hsl(320,100%,60%))' }} />
+                      </div>
+                    ))}
+                    <span className="text-xs text-white/40 shrink-0">
+                      {filled}/3
+                    </span>
                   </div>
-                )}
-              </motion.div>
-              <input ref={fileRef} type="file" accept="image/*" onChange={handlePhoto} className="hidden" />
-              {data.photo1_url && !uploading && (
-                <button onClick={() => fileRef.current?.click()} className="text-sm text-[hsl(290,100%,65%)] underline">{t(lang, 'changePhoto')}</button>
-              )}
-              {uploading && (
-                <p className="text-xs text-white/40">{lang === 'he' ? 'מדחיס תמונה...' : 'Compressing photo...'}</p>
-              )}
-              {photoError && (
-                <p className="text-xs text-red-400">{photoError}</p>
-              )}
+                )
+              })()}
+
+              {/* Photo grid — large first, two smaller below */}
+              <div className="space-y-2">
+                {/* Main photo */}
+                {([0, 1, 2] as const).map(i => {
+                  const photoKey = `photo${i + 1}_url` as 'photo1_url' | 'photo2_url' | 'photo3_url'
+                  const photoUrl = data[photoKey]
+                  const isUploading = uploadingSlot === i
+                  const labels = lang === 'he'
+                    ? ['תמונה ראשית', 'תמונה שנייה', 'תמונה שלישית']
+                    : ['Main photo', 'Second photo', 'Third photo']
+                  return (
+                    <motion.div key={i} whileTap={{ scale: 0.98 }}
+                      onClick={() => fileRefs[i].current?.click()}
+                      className="relative w-full rounded-2xl overflow-hidden cursor-pointer border-2 border-dashed transition-colors"
+                      style={{
+                        height: i === 0 ? 180 : 110,
+                        borderColor: photoUrl ? 'hsl(290,100%,65%,0.5)' : 'rgba(255,255,255,0.12)',
+                        background: photoUrl ? 'none' : 'rgba(139,92,246,0.06)',
+                      }}>
+                      {photoUrl ? (
+                        <img src={photoUrl} className="w-full h-full object-cover" alt="" />
+                      ) : (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1">
+                          <span className="text-2xl opacity-40">📷</span>
+                          <span className="text-xs text-white/30">{labels[i]}</span>
+                        </div>
+                      )}
+                      {isUploading && (
+                        <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                          <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        </div>
+                      )}
+                      {photoUrl && !isUploading && (
+                        <div className="absolute top-2 right-2 w-7 h-7 rounded-full flex items-center justify-center text-sm"
+                          style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}>
+                          ✏️
+                        </div>
+                      )}
+                      <input ref={fileRefs[i]} type="file" accept="image/*"
+                        onChange={e => handlePhoto(i, e)} className="hidden" />
+                    </motion.div>
+                  )
+                })}
+              </div>
+
+              {photoError && <p className="text-xs text-red-400 text-center">{photoError}</p>}
+              {error && <p className="text-red-400 text-sm text-center">{error}</p>}
+
               <div className="flex gap-3">
                 <NeonButton variant="ghost" size="md" onClick={() => setStep(2)}>{t(lang, 'back')}</NeonButton>
-                <NeonButton variant="purple" size="md" fullWidth onClick={next} disabled={uploading}>
-                  {data.photo1_url ? `${t(lang, 'next')} →` : (lang === 'he' ? 'דלג בינתיים →' : 'Skip for now →')}
+                <NeonButton variant="purple" size="md" fullWidth onClick={next} disabled={uploadingSlot !== null}>
+                  {t(lang, 'next')} →
                 </NeonButton>
               </div>
             </div>

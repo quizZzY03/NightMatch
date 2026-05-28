@@ -1,3 +1,4 @@
+import React from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useApp } from './context/AppContext'
 import Layout from './components/Layout'
@@ -11,6 +12,7 @@ import Onboarding from './pages/Onboarding'
 import PhoneAuth from './pages/PhoneAuth'
 import Admin from './pages/Admin'
 import Terms from './pages/Terms'
+import TestEnv from './pages/TestEnv'
 
 function Particles() {
   return (
@@ -39,6 +41,12 @@ function Spinner() {
       </div>
     </div>
   )
+}
+
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { user } = useApp()
+  if (!user?.is_admin) return <Navigate to="/" replace />
+  return <>{children}</>
 }
 
 export default function App() {
@@ -91,13 +99,14 @@ export default function App() {
       <div className="relative z-10 h-full">
         <Layout>
           <Routes>
-            <Route path="/" element={<Home />} />
+            <Route path="/" element={user?.is_admin ? <Navigate to="/admin" replace /> : <Home />} />
             <Route path="/checkin" element={<CheckIn />} />
             <Route path="/feed" element={<Feed />} />
             <Route path="/matches" element={<Matches />} />
             <Route path="/chat/:matchId" element={<Chat />} />
             <Route path="/profile" element={<Profile />} />
-            <Route path="/admin" element={<Admin />} />
+            <Route path="/admin" element={<AdminRoute><Admin /></AdminRoute>} />
+            <Route path="/test" element={<AdminRoute><TestEnv /></AdminRoute>} />
             <Route path="/terms" element={<Terms />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
