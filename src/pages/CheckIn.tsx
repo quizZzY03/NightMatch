@@ -216,9 +216,9 @@ export default function CheckIn() {
           </p>
           {[
             ['🎫', lang === 'he' ? 'בעל העסק מדפיס QR אחד — קבוע לתמיד' : 'Venue owner prints one QR — permanent forever'],
-            ['📍', lang === 'he' ? 'אימות GPS — חייב להיות במקום פיזית' : 'GPS verification — must be physically present'],
+            ['📱', lang === 'he' ? 'סרוק את ה-QR ותיכנס מיד לפיד' : 'Scan the QR and join the feed instantly'],
             ['🔄', lang === 'he' ? 'הסשן מתאפס אוטומטית בכל לילה ב-06:00' : 'Session resets automatically each night at 06:00'],
-            ['🕗', lang === 'he' ? 'פעיל רק בין 20:00 ל-06:00' : 'Active only between 20:00 and 06:00'],
+            ['💡', lang === 'he' ? 'רק אנשים באותו מקום יכולים להתאחד' : 'Only people at the same venue can match'],
           ].map(([icon, text]) => (
             <div key={text} className="flex items-center gap-3 text-xs text-white/40">
               <span className="text-base shrink-0">{icon}</span>
@@ -241,7 +241,6 @@ export default function CheckIn() {
             lang={lang}
             onSuccess={handleVerifySuccess}
             onCancel={() => setSelectedVenue(null)}
-            devBypass={user?.is_admin}
           />
         )}
       </AnimatePresence>

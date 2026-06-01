@@ -1,5 +1,5 @@
 import {
-  doc, getDoc, setDoc, updateDoc,
+  doc, getDoc, setDoc, updateDoc, deleteDoc,
   collection, query, where, onSnapshot, addDoc,
   serverTimestamp, orderBy, limit, getDocs, DocumentData, deleteField,
 } from 'firebase/firestore'
@@ -25,6 +25,31 @@ export async function saveUser(uid: string, data: Partial<User>): Promise<User> 
     await setDoc(ref, { ...data, id: uid, created_at: serverTimestamp(), updated_at: serverTimestamp() })
   }
   return { id: uid, ...data } as User
+}
+
+/** Delete all user-owned Firestore data: profile, check-ins, likes, matches. */
+export async function deleteUserData(uid: string): Promise<void> {
+  if (!FIREBASE_CONFIGURED) return
+  // Delete user document
+  try { await deleteDoc(doc(db, 'users', uid)) } catch {}
+  // Delete all check-ins
+  try {
+    const snap = await getDocs(query(collection(db, 'checkins'), where('user_id', '==', uid)))
+    await Promise.all(snap.docs.map(d => deleteDoc(d.ref)))
+  } catch {}
+  // Delete all likes sent by this user
+  try {
+    const snap = await getDocs(query(collection(db, 'likes'), where('from_user_id', '==', uid)))
+    await Promise.all(snap.docs.map(d => deleteDoc(d.ref)))
+  } catch {}
+  // Deactivate matches (security rules forbid delete; mark inactive instead)
+  try {
+    const [m1, m2] = await Promise.all([
+      getDocs(query(collection(db, 'matches'), where('user1_id', '==', uid), where('is_active', '==', true))),
+      getDocs(query(collection(db, 'matches'), where('user2_id', '==', uid), where('is_active', '==', true))),
+    ])
+    await Promise.all([...m1.docs, ...m2.docs].map(d => updateDoc(d.ref, { is_active: false })))
+  } catch {}
 }
 
 // ── Venues ────────────────────────────────────────────────────────────────────
@@ -121,7 +146,9 @@ export function listenFeed(
   preference: string,
   callback: (people: FeedPerson[]) => void
 ): () => void {
-  if (!FIREBASE_CONFIGURED || currentUserId === 'demo-user') {
+  // Bypass Firestore for demo users and dev QA bypass (no real Firebase auth token)
+  const isQaBypassed = import.meta.env.DEV && localStorage.getItem('nightmatch_qa_bypass') === 'true'
+  if (!FIREBASE_CONFIGURED || currentUserId === 'demo-user' || isQaBypassed) {
     callback(local.getFeedPeople(venueId, preference))
     return () => {}
   }
@@ -133,23 +160,25 @@ export function listenFeed(
     limit(100)
   )
   return onSnapshot(q, async snap => {
-    const likedSnap = await getDocs(query(
-      collection(db, 'likes'),
-      where('from_user_id', '==', currentUserId)
-    ))
+    const [likedSnap, blockedSnap] = await Promise.all([
+      getDocs(query(collection(db, 'likes'), where('from_user_id', '==', currentUserId))),
+      getDocs(query(collection(db, 'blocks'), where('blocker_id', '==', currentUserId))),
+    ])
     const seen = new Set(
       likedSnap.docs
         .filter(d => d.data().session_key === sKey)
         .map(d => (d.data() as DocumentData).to_user_id as string)
     )
+    const blocked = new Set(blockedSnap.docs.map(d => d.data().blocked_id as string))
 
     const people: FeedPerson[] = snap.docs
       .map(d => ({ id: d.id, ...(d.data() as DocumentData) }))
       .filter(p => p.is_active !== false)
-      .filter(p => p.user_id !== currentUserId && !seen.has(p.user_id as string))
+      .filter(p => p.user_id !== currentUserId && !seen.has(p.user_id as string) && !blocked.has(p.user_id as string))
       .filter(p => {
-        if (preference === 'male') return p.user_gender === 'male'
-        if (preference === 'female') return p.user_gender === 'female'
+        // preference stored as 'men'/'women'/'all' (Profile page) — normalise both forms
+        if (preference === 'men'   || preference === 'male')   return p.user_gender === 'male'
+        if (preference === 'women' || preference === 'female') return p.user_gender === 'female'
         return true
       })
       .map(p => ({
@@ -223,42 +252,6 @@ async function createMatch(fromUser: User, toUserId: string, venueId: string, sK
   return { id: ref.id, ...match } as unknown as Match
 }
 
-export async function superLikePerson(fromUser: User, toUserId: string, venueId: string): Promise<Match | null> {
-  if (!FIREBASE_CONFIGURED) return local.superLikePerson(toUserId)
-  const sKey = sessionKey(venueId)
-
-  await addDoc(collection(db, 'likes'), {
-    from_user_id: fromUser.id,
-    to_user_id: toUserId,
-    venue_id: venueId,
-    session_key: sKey,
-    is_super_like: true,
-    is_active: true,
-    created_at: serverTimestamp(),
-  })
-
-  await addDoc(collection(db, 'notifications'), {
-    user_id: toUserId,
-    type: 'super_like',
-    from_user_id: fromUser.id,
-    from_user_name: fromUser.display_name,
-    from_user_photo: fromUser.photo1_url ?? null,
-    venue_id: venueId,
-    session_key: sKey,
-    is_read: false,
-    created_at: serverTimestamp(),
-  })
-
-  const mutual = await getDocs(query(
-    collection(db, 'likes'),
-    where('from_user_id', '==', toUserId),
-    where('to_user_id', '==', fromUser.id),
-    where('session_key', '==', sKey)
-  ))
-  if (!mutual.empty) return createMatch(fromUser, toUserId, venueId, sKey)
-  return null
-}
-
 // ── Matches listener ──────────────────────────────────────────────────────────
 export function listenMatches(userId: string, callback: (matches: Match[]) => void): () => void {
   if (!FIREBASE_CONFIGURED || userId === 'demo-user') { callback(local.getMatches()); return () => {} }
@@ -290,7 +283,6 @@ export interface IncomingLike {
   from_user_photo: string | null
   from_user_age: number | null
   from_user_gender: string | null
-  is_super_like?: boolean
 }
 
 export function listenIncomingLikes(
@@ -312,7 +304,6 @@ export function listenIncomingLikes(
       from_user_photo: (d.data().from_user_photo as string | null) ?? null,
       from_user_age: (d.data().from_user_age as number | null) ?? null,
       from_user_gender: (d.data().from_user_gender as string | null) ?? null,
-      is_super_like: !!d.data().is_super_like,
     })))
   })
 }

@@ -1,6 +1,6 @@
-const CACHE_NAME = 'nightmatch-v4';
+const CACHE_NAME = 'nightmatch-v5';
 
-const PRECACHE = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
+const PRECACHE = ['/', '/index.html', '/offline.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(
@@ -46,7 +46,7 @@ self.addEventListener('fetch', e => {
           caches.open(CACHE_NAME).then(c => c.put(request, clone));
           return res;
         })
-        .catch(() => caches.match('/index.html'))
+        .catch(() => caches.match('/offline.html') ?? caches.match('/index.html'))
     );
     return;
   }

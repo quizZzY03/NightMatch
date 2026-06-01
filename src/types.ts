@@ -7,7 +7,7 @@ export interface User {
   gender: 'male' | 'female' | 'other' | ''
   bio?: string
   tonight_status?: string
-  preference?: 'men' | 'women' | 'all' | ''
+  preference?: 'men' | 'women' | 'male' | 'female' | 'all' | ''
   instagram_handle?: string
   photo1_url?: string | null
   photo2_url?: string | null
@@ -92,7 +92,6 @@ export interface Like {
   to_user_id: string
   venue_id: string
   session_key: string
-  is_super_like?: boolean
   is_active: boolean
   created_at?: unknown
 }

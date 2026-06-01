@@ -1,64 +1,26 @@
-import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'
-import app from './config'
-
-const storage = getStorage(app)
+import { compressToBase64 } from '../utils/imageUtils'
 
 /**
- * Upload a profile photo to Firebase Storage.
- * Returns the public download URL.
+ * Upload a profile photo.
  *
- * Path: photos/{userId}/photo{slot}.jpg  (slot = 1 | 2 | 3)
+ * Strategy: compress to base64 (≤400 px, ≤65 % quality → ~15–40 KB each)
+ * and return the data-URL directly. This is stored in the user's Firestore
+ * document and works on img[src] with no external storage service needed.
+ *
+ * If Firebase Storage is ever enabled, replace this with a real upload.
  */
 export async function uploadProfilePhoto(
-  userId: string,
+  _userId: string,
   file: File,
-  slot: 1 | 2 | 3 = 1
+  _slot: 1 | 2 | 3 = 1
 ): Promise<string> {
-  // Compress/resize on client before uploading
-  const compressed = await compressImage(file, 800, 0.82)
-  const path = `photos/${userId}/photo${slot}.jpg`
-  const storageRef = ref(storage, path)
-  await uploadBytes(storageRef, compressed, { contentType: 'image/jpeg' })
-  return getDownloadURL(storageRef)
+  // 400 px max, 65 % quality → typically 15–40 KB base64 per photo
+  return compressToBase64(file, 400, 0.65)
 }
 
 /**
- * Delete a profile photo from Firebase Storage.
+ * No-op: base64 images live in Firestore, not in a storage bucket.
  */
-export async function deleteProfilePhoto(userId: string, slot: 1 | 2 | 3 = 1): Promise<void> {
-  const path = `photos/${userId}/photo${slot}.jpg`
-  const storageRef = ref(storage, path)
-  try {
-    await deleteObject(storageRef)
-  } catch {
-    // File may not exist — ignore
-  }
-}
-
-// ── Image compression ─────────────────────────────────────────────────────────
-function compressImage(file: File, maxSize: number, quality: number): Promise<Blob> {
-  return new Promise((resolve, reject) => {
-    const img = new Image()
-    const url = URL.createObjectURL(file)
-    img.onload = () => {
-      URL.revokeObjectURL(url)
-      const canvas = document.createElement('canvas')
-      let { width, height } = img
-      if (width > height) {
-        if (width > maxSize) { height = Math.round(height * maxSize / width); width = maxSize }
-      } else {
-        if (height > maxSize) { width = Math.round(width * maxSize / height); height = maxSize }
-      }
-      canvas.width = width
-      canvas.height = height
-      const ctx = canvas.getContext('2d')!
-      ctx.drawImage(img, 0, 0, width, height)
-      canvas.toBlob(blob => {
-        if (blob) resolve(blob)
-        else reject(new Error('Canvas toBlob failed'))
-      }, 'image/jpeg', quality)
-    }
-    img.onerror = reject
-    img.src = url
-  })
+export async function deleteProfilePhoto(_userId: string, _slot: 1 | 2 | 3 = 1): Promise<void> {
+  // Nothing to delete from storage — caller can null out the field in Firestore
 }

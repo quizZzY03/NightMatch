@@ -9,6 +9,7 @@ import { listenStats } from '../firebase/db'
 import { getLiveStats, getVenueById, checkOut } from '../utils/storage'
 import { checkOut as fbCheckOut } from '../firebase/db'
 import { FIREBASE_CONFIGURED } from '../firebase/config'
+import { useInstallPrompt } from '../hooks/useInstallPrompt'
 
 export default function Home() {
   const { lang, checkin, user, refreshCheckin } = useApp()
@@ -32,6 +33,7 @@ export default function Home() {
     ? (getVenueById(checkin.venue_id) || { name: checkin.venue_name || checkin.venue_id, city: checkin.venue_city || '' })
     : null
   const he = lang === 'he'
+  const { canInstall, triggerInstall } = useInstallPrompt()
 
   return (
     <div className="h-full overflow-y-auto scrollbar-hide" dir={he ? 'rtl' : 'ltr'}>
@@ -158,6 +160,23 @@ export default function Home() {
             </motion.div>
           ))}
         </motion.div>
+
+        {/* Install App banner — shown only on Android Chrome or other browsers that support beforeinstallprompt */}
+        {canInstall && (
+          <motion.button
+            initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+            onClick={triggerInstall}
+            className="w-full flex items-center gap-3 rounded-2xl p-4 border border-[hsl(290,100%,65%,0.3)] text-start"
+            style={{ background: 'hsl(290,100%,65%,0.07)' }}
+          >
+            <span className="text-2xl">📲</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-white">{he ? 'הוסף למסך הבית' : 'Add to Home Screen'}</p>
+              <p className="text-xs text-white/40">{he ? 'גישה מהירה בלי דפדפן' : 'Instant access without browser'}</p>
+            </div>
+            <span className="text-[hsl(290,100%,70%)] text-xs font-semibold shrink-0">{he ? 'התקן' : 'Install'}</span>
+          </motion.button>
+        )}
 
         {/* Footer */}
         <div className="text-center pt-2">

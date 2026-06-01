@@ -1,12 +1,13 @@
 /**
- * Compress an image file to a base64 string that is safe to store in Firestore.
- * Max dimension: 800px, JPEG quality: 0.82 → typically 40-120 KB as base64.
- * Firestore document limit is 1 MB — this stays well within it.
+ * Compress an image file to a base64 JPEG data-URL.
+ * Default: 400 px max, 65 % quality → ~15–40 KB per image.
+ * Firestore document limit is 1 MB — 3 photos at 40 KB each is ~160 KB with base64
+ * overhead, well within the limit.
  */
 export function compressToBase64(
   file: File,
-  maxSize = 800,
-  quality = 0.82
+  maxSize = 400,
+  quality = 0.65
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image()

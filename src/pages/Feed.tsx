@@ -8,8 +8,7 @@ import MatchModal from '../components/MatchModal'
 import ProfileModal from '../components/ProfileModal'
 import NeonButton from '../components/NeonButton'
 import { CountdownTimerCompact } from '../components/CountdownTimer'
-import { likePerson, superLikePerson, listenFeed, getUser } from '../firebase/db'
-import { canSuperLike, getSuperLikesRemaining } from '../utils/storage'
+import { likePerson, listenFeed, getUser } from '../firebase/db'
 import { usePushNotifications } from '../hooks/usePushNotifications'
 
 const PREF_TO_FILTER = { men: 'male', women: 'female', all: 'all' }
@@ -23,6 +22,7 @@ export default function Feed() {
   const [feedLoading, setFeedLoading] = useState(true)
   const [match, setMatch] = useState(null)
   const [profilePerson, setProfilePerson] = useState(null)
+  const [isActing, setIsActing] = useState(false) // anti-spam guard
 
   async function handleTap(person) {
     setProfilePerson(person)
@@ -62,31 +62,27 @@ export default function Feed() {
   const isDemo = user?.id === 'demo-user'
 
   async function handleLike(person) {
-    if (!user || !checkin) return
+    if (!user || !checkin || isActing) return
+    setIsActing(true)
     setPeople(prev => prev.filter(p => p.id !== person.id))
-    const newMatch = isDemo
-      ? (await import('../utils/storage')).likePerson(person.id)
-      : await likePerson(user, person.id, checkin.venue_id)
-    if (newMatch) {
-      await notifyMatch(newMatch.user2_name || newMatch.user1_name, lang)
-      setMatch(newMatch)
-    }
-  }
-
-  async function handleSuperLike(person) {
-    if (!user || !checkin) return
-    if (!canSuperLike(user)) return
-    setPeople(prev => prev.filter(p => p.id !== person.id))
-    const newMatch = isDemo
-      ? (await import('../utils/storage')).superLikePerson(person.id)
-      : await superLikePerson(user, person.id, checkin.venue_id)
-    if (newMatch) {
-      await notifyMatch(newMatch.user2_name || newMatch.user1_name, lang)
-      setMatch(newMatch)
+    try {
+      const newMatch = isDemo
+        ? (await import('../utils/storage')).likePerson(person.id)
+        : await likePerson(user, person.id, checkin.venue_id)
+      if (newMatch) {
+        await notifyMatch(newMatch.user2_name || newMatch.user1_name, lang)
+        setMatch(newMatch)
+      }
+    } catch (e) {
+      console.error('Like error:', e)
+    } finally {
+      // Short cooldown to prevent rapid fire
+      setTimeout(() => setIsActing(false), 400)
     }
   }
 
   function handlePass(person) {
+    if (isActing) return
     setPeople(prev => prev.filter(p => p.id !== person.id))
     if (isDemo) import('../utils/storage').then(m => m.passPerson(person.id))
   }
@@ -149,25 +145,20 @@ export default function Feed() {
 
             {/* Action buttons — ✕ pass · ⭐ super like · ♥ like */}
             <div className="flex items-center justify-center gap-5 py-3" dir="ltr">
-              <motion.button whileTap={{ scale: 0.82 }} onClick={() => topPerson && handlePass(topPerson)}
-                className="w-14 h-14 rounded-full flex items-center justify-center glass-card border-2 border-red-400/40 hover:border-red-400 transition-colors"
+              <motion.button
+                whileTap={{ scale: 0.82 }}
+                onClick={() => topPerson && handlePass(topPerson)}
+                disabled={isActing}
+                className="w-14 h-14 rounded-full flex items-center justify-center glass-card border-2 border-red-400/40 hover:border-red-400 transition-colors disabled:opacity-50"
                 style={{ boxShadow: '0 4px 20px rgba(248,113,113,0.15)' }}>
                 <span className="text-red-400 text-2xl font-bold">✕</span>
               </motion.button>
 
-              <motion.button whileTap={{ scale: 0.82 }} onClick={() => topPerson && handleSuperLike(topPerson)}
-                disabled={!canSuperLike(user)}
-                className="w-12 h-12 rounded-full flex flex-col items-center justify-center border-2 transition-colors disabled:opacity-30"
-                style={{ background: 'rgba(250,204,21,0.12)', borderColor: 'rgba(250,204,21,0.4)', boxShadow: '0 4px 16px rgba(250,204,21,0.15)' }}
-                title={`סופר לייק — נותרו ${getSuperLikesRemaining(user) ?? '∞'}`}>
-                <span className="text-yellow-400 text-xl leading-none">⭐</span>
-                {!user?.is_premium && (
-                  <span className="text-yellow-400/60 text-[9px] font-bold leading-none mt-0.5">{getSuperLikesRemaining(user)}</span>
-                )}
-              </motion.button>
-
-              <motion.button whileTap={{ scale: 0.82 }} onClick={() => topPerson && handleLike(topPerson)}
-                className="w-14 h-14 rounded-full flex items-center justify-center border-2 border-green-400/40 hover:border-green-400 transition-colors"
+              <motion.button
+                whileTap={{ scale: 0.82 }}
+                onClick={() => topPerson && handleLike(topPerson)}
+                disabled={isActing}
+                className="w-14 h-14 rounded-full flex items-center justify-center border-2 border-green-400/40 hover:border-green-400 transition-colors disabled:opacity-50"
                 style={{ background: 'linear-gradient(135deg, hsl(290,100%,65%,0.15), hsl(320,100%,60%,0.15))', boxShadow: '0 4px 20px rgba(74,222,128,0.2)' }}>
                 <span className="text-green-400 text-2xl">♥</span>
               </motion.button>

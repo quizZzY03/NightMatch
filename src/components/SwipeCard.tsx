@@ -8,7 +8,7 @@ const GENDER_COLORS = {
   other: 'from-[hsl(130,80%,30%)] to-[hsl(185,100%,30%)]',
 }
 
-export default function SwipeCard({ person, onLike, onPass, onSuperLike, onTap, isTop, index, lang }) {
+export default function SwipeCard({ person, onLike, onPass, onTap, isTop, index, lang }) {
   const x = useMotionValue(0)
   const rotate = useTransform(x, [-220, 220], [-22, 22])
   const likeOpacity = useTransform(x, [30, 120], [0, 1])
@@ -126,13 +126,7 @@ export default function SwipeCard({ person, onLike, onPass, onSuperLike, onTap, 
           </div>
         )}
 
-        {/* Super like ring — shown via prop */}
-        {isTop && dragging && (
-          <motion.div
-            className="absolute inset-0 rounded-[28px] pointer-events-none"
-            animate={{ boxShadow: '0 0 0 3px rgba(250,204,21,0)' }}
-          />
-        )}
+
       </div>
     </motion.div>
   )

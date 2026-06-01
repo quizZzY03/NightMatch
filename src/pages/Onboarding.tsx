@@ -45,13 +45,13 @@ export default function Onboarding() {
     if (step === 1) {
       if (!data.display_name.trim()) return t(lang, 'required') + ': ' + t(lang, 'displayName')
       const age = parseInt(data.age)
-      if (!age || age < 18 || age > 80) return (lang === 'he' ? 'גיל חייב להיות בין 18-80' : 'Age must be between 18-80')
+      if (!age || age < 18 || age > 100) return (lang === 'he' ? 'גיל חייב להיות בין 18-100' : 'Age must be between 18-100')
       if (!data.gender) return t(lang, 'required') + ': ' + t(lang, 'gender')
     }
     if (step === 2 && data.tonight_status.length === 0) return t(lang, 'required') + ': ' + t(lang, 'tonightStatus')
     if (step === 3) {
       const filled = [data.photo1_url, data.photo2_url, data.photo3_url].filter(Boolean).length
-      if (filled < 3) return lang === 'he' ? `חובה להעלות 3 תמונות (${filled}/3)` : `Please upload 3 photos (${filled}/3)`
+      if (filled < 1) return lang === 'he' ? 'חובה להעלות לפחות תמונה אחת' : 'Please upload at least 1 photo'
     }
     return ''
   }
@@ -236,10 +236,10 @@ export default function Onboarding() {
             <div className="space-y-5">
               <div className="text-center">
                 <h2 className="text-2xl font-bold text-white mb-1">
-                  {lang === 'he' ? '3 תמונות — חובה' : '3 Photos — Required'}
+                  {lang === 'he' ? 'תמונות פרופיל' : 'Profile Photos'}
                 </h2>
                 <p className="text-sm text-white/40">
-                  {lang === 'he' ? 'פרופילים עם 3 תמונות מקבלים פי 8 יותר מאצ׳ים' : 'Profiles with 3 photos get 8× more matches'}
+                  {lang === 'he' ? 'תמונה אחת חובה — שלוש מומלץ' : '1 photo required — 3 recommended'}
                 </p>
               </div>
 

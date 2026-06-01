@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react'
 import { User as FirebaseUser } from 'firebase/auth'
-import { onAuthStateChanged } from '../firebase/auth'
+import { onAuthStateChanged, handleRedirectResult } from '../firebase/auth'
 import { getUser, saveUser as fbSaveUser, listenMatches } from '../firebase/db'
 import { FIREBASE_CONFIGURED } from '../firebase/config'
 import { getCurrentUser, saveUser as localSaveUser, getActiveCheckin } from '../utils/storage'
@@ -24,6 +24,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setFirebaseUser({ uid: 'qa-test-user' } as FirebaseUser)
       return
     }
+
+    // Complete any pending Google/Apple signInWithRedirect flow.
+    // On mobile the OAuth provider redirects back to the app and Firebase needs
+    // getRedirectResult() called before onAuthStateChanged fires the signed-in user.
+    handleRedirectResult().catch(() => {})
+
     const unsub = onAuthStateChanged(fbUser => {
       setFirebaseUser(fbUser ?? null)
     })
@@ -69,7 +75,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
             onboarding_complete: true,
           } as User
         }
-        console.log('[AppContext] load finally — uid:', (firebaseUser as FirebaseUser).uid, 'email:', (firebaseUser as FirebaseUser).email, 'isAdmin:', isAdmin, 'onboarding_complete:', profile?.onboarding_complete)
         if (profile && !profile.is_demo) {
           const enriched: User = { ...profile, is_admin: isAdmin }
           setUser(enriched)

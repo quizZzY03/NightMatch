@@ -25,8 +25,8 @@ export default function Terms() {
       body: 'אנו אוספים מידע שאתה מסכים לשתף (שם, גיל, תמונה, מיקום כללי לצ\'ק-אין). הנתונים מאוחסנים ב-Firebase (Google) בשרתים מאובטחים. פרופילים מתאפסים אוטומטית בתום כל לילה.',
     },
     {
-      title: '5. מיקום',
-      body: 'האפליקציה משתמשת ב-GPS לצורך אימות שאתה נמצא פיזית בוונה. נתוני המיקום אינם נשמרים לאחר הצ\'ק-אין.',
+      title: '5. כניסה למקום',
+      body: 'הצ\'ק-אין מתבצע על ידי סריקת QR ייחודי של הוונה. לא נאסף ולא נשמר מידע מיקום גיאוגרפי (GPS) ממכשירך.',
     },
     {
       title: '6. ביטול חשבון',
@@ -58,8 +58,8 @@ export default function Terms() {
       body: 'We collect information you agree to share (name, age, photo, general location for check-in). Data is stored on Firebase (Google) secure servers. Profiles reset automatically at the end of each night.',
     },
     {
-      title: '5. Location',
-      body: 'The app uses GPS to verify you are physically present at the venue. Location data is not stored after check-in.',
+      title: '5. Venue Check-In',
+      body: 'Check-in is performed by scanning the venue\'s unique QR code. No GPS or geographic location data is collected or stored from your device.',
     },
     {
       title: '6. Account Deletion',

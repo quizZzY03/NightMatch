@@ -104,8 +104,8 @@ export function getFeedPeople(venueId: string, filter = 'all'): FeedPerson[] {
   return pool.filter(p => {
     if (p.id === user?.id) return false
     if (seen.includes(p.id)) return false
-    if (filter === 'male' && p.gender !== 'male') return false
-    if (filter === 'female' && p.gender !== 'female') return false
+    if ((filter === 'male'   || filter === 'men')   && p.gender !== 'male')   return false
+    if ((filter === 'female' || filter === 'women') && p.gender !== 'female') return false
     return true
   })
 }
@@ -197,7 +197,7 @@ export function startDemo(): { user: User; checkin: Checkin } {
     user_name: demoUser.display_name, is_active: true, created_at: Date.now(),
   }
   set('active_checkin', checkin)
-  del('liked_ids'); del('passed_ids'); del('super_likes'); del('matches')
+  del('liked_ids'); del('passed_ids'); del('matches')
   return { user: demoUser, checkin }
 }
 
@@ -206,52 +206,8 @@ export function getLiveStats(): Stats {
   return { active_checkins: 847 + Math.floor(Math.random() * 10), active_matches: 203 + Math.floor(Math.random() * 5) }
 }
 
-// ── Super Likes ───────────────────────────────────────────────────────────────
-const SUPER_LIKE_FREE_LIMIT = 3
-const _h = (s: string): number => [...s].reduce((h, c) => Math.imul(31, h) + c.charCodeAt(0) | 0, 0)
-const PREMIUM_HASHES = new Set([-1690018729, 1727293579, -1029576005])
-
-export function getSuperLikesUsed(): number {
-  const data = get<{ date: string; count: number }>('super_likes') ?? {}
-  if ((data as { date?: string }).date !== todayKey()) return 0
-  return (data as { count?: number }).count ?? 0
-}
-
-export function useSuperLike(): number {
-  const today = todayKey()
-  const count = getSuperLikesUsed()
-  set('super_likes', { date: today, count: count + 1 })
-  return count + 1
-}
-
-export function canSuperLike(user: User | null): boolean {
-  if (user?.is_premium) return true
-  return getSuperLikesUsed() < SUPER_LIKE_FREE_LIMIT
-}
-
-export function getSuperLikesRemaining(user: User | null): number | null {
-  if (user?.is_premium) return null
-  return Math.max(0, SUPER_LIKE_FREE_LIMIT - getSuperLikesUsed())
-}
-
-export function activatePremiumCode(code: string): boolean {
-  if (PREMIUM_HASHES.has(_h(code.trim().toUpperCase()))) {
-    const user = getCurrentUser()
-    if (user) set('user', { ...user, is_premium: true })
-    return true
-  }
-  return false
-}
-
-export function superLikePerson(targetId: string): Match | null {
-  const liked = get<string[]>('liked_ids') ?? []
-  set('liked_ids', [...liked, targetId])
-  if (Math.random() < 0.6) return createMatch(targetId)
-  return null
-}
-
 export function resetForNewDay(): void {
-  del('active_checkin'); del('liked_ids'); del('passed_ids'); del('matches'); del('super_likes')
+  del('active_checkin'); del('liked_ids'); del('passed_ids'); del('matches')
   const user = getCurrentUser()
   if (user) set('user', { ...user, current_venue_id: null })
 }

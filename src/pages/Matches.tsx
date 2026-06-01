@@ -116,9 +116,6 @@ export default function Matches() {
                           size="md"
                           online
                         />
-                        {like.is_super_like && (
-                          <span className="absolute -top-1 -right-1 text-sm">⭐</span>
-                        )}
                         <p className="text-[9px] text-white/60 text-center mt-1 max-w-[52px] truncate">
                           {like.from_user_name?.split(' ')[0]}
                           {like.from_user_age ? `, ${like.from_user_age}` : ''}
@@ -135,9 +132,6 @@ export default function Matches() {
                               style={{ background: `hsl(${(i * 73) % 360},70%,40%)` }} />
                           )}
                         </div>
-                        {like.is_super_like && (
-                          <span className="absolute -top-1 -right-1 text-sm z-10">⭐</span>
-                        )}
                       </div>
                     )}
                   </motion.div>

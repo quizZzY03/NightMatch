@@ -7,12 +7,13 @@ import NeonButton from '../components/NeonButton'
 import Avatar from '../components/Avatar'
 import { useToast } from '../components/Toast'
 import { signOut as localSignOut } from '../utils/storage'
-import { signOut as fbSignOut } from '../firebase/auth'
-import { checkIn as fbCheckIn, updateCheckinProfile } from '../firebase/db'
+import { signOut as fbSignOut, deleteAccount as fbDeleteAccount } from '../firebase/auth'
+import { checkIn as fbCheckIn, updateCheckinProfile, deleteUserData } from '../firebase/db'
 import { FIREBASE_CONFIGURED } from '../firebase/config'
 import { seedTestCheckins, clearTestCheckins } from '../utils/seedTestData'
 import { compressToBase64 } from '../utils/imageUtils'
 import { uploadProfilePhoto } from '../firebase/storage'
+import { useInstallPrompt } from '../hooks/useInstallPrompt'
 
 const TEST_VENUE_ID = 'rotch-rishon'
 
@@ -89,14 +90,30 @@ export default function Profile() {
   const up = <K extends keyof ProfileForm>(k: K, v: ProfileForm[K]) => setForm(f => ({ ...f, [k]: v }))
 
   async function handleSave() {
+    // ── Validation ──────────────────────────────────────────────────
+    const name = form.display_name.trim()
+    if (!name || name.length < 2) {
+      toast(lang === 'he' ? 'שם חייב להכיל לפחות 2 תווים' : 'Name must be at least 2 characters', 'error')
+      return
+    }
+    const ageNum = Number(form.age)
+    if (!ageNum || ageNum < 18 || ageNum > 100) {
+      toast(lang === 'he' ? 'גיל חייב להיות בין 18-100' : 'Age must be between 18 and 100', 'error')
+      return
+    }
+    // Strip leading @ from instagram handle, trim whitespace
+    const instaHandle = form.instagram_handle.replace(/^@+/, '').trim().slice(0, 30)
+
     const tonight_status = Array.isArray(form.tonight_status)
       ? form.tonight_status.join(' · ')
       : form.tonight_status
-    await updateUser({ ...form, tonight_status })
+
+    const patch = { ...form, display_name: name, instagram_handle: instaHandle, tonight_status }
+    await updateUser(patch)
     if (user?.id && user.id !== 'demo-user') {
       updateCheckinProfile(user.id, {
-        display_name: form.display_name,
-        age: form.age,
+        display_name: name,
+        age: ageNum,
         gender: form.gender,
         bio: form.bio,
         tonight_status,
@@ -104,7 +121,7 @@ export default function Profile() {
     }
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
-    toast(lang === 'he' ? 'הפרופיל נשמר בהצלחה' : 'Profile saved!', 'success')
+    toast(lang === 'he' ? '✅ הפרופיל נשמר בהצלחה' : '✅ Profile saved!', 'success')
   }
 
   async function handlePhoto(index: number, e: React.ChangeEvent<HTMLInputElement>) {
@@ -139,7 +156,40 @@ export default function Profile() {
     window.location.reload()
   }
 
+  const [deleteConfirm, setDeleteConfirm] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  async function handleDeleteAccount() {
+    if (!deleteConfirm) { setDeleteConfirm(true); return }
+    setDeleting(true)
+    try {
+      if (user?.id && user.id !== 'demo-user') {
+        await deleteUserData(user.id)
+        await fbDeleteAccount()
+      }
+      localSignOut()
+      window.location.replace('/')
+    } catch (e: unknown) {
+      const code = (e as { code?: string })?.code
+      if (code === 'auth/requires-recent-login') {
+        toast(
+          lang === 'he'
+            ? 'נא להתחבר מחדש ואז למחוק'
+            : 'Please sign in again, then delete',
+          'error'
+        )
+        await fbSignOut()
+        window.location.reload()
+      } else {
+        toast(lang === 'he' ? 'שגיאה במחיקת חשבון' : 'Error deleting account', 'error')
+      }
+      setDeleting(false)
+      setDeleteConfirm(false)
+    }
+  }
+
   const photos = [user?.photo1_url, user?.photo2_url, user?.photo3_url]
+  const { canInstall, installed, triggerInstall } = useInstallPrompt()
 
   return (
     <div className="h-full overflow-y-auto scroll-area scrollbar-hide" dir={isRTL ? 'rtl' : 'ltr'}>
@@ -321,14 +371,33 @@ export default function Profile() {
         )}
 
         {/* Install App */}
-        <div className="glass-card border border-white/8 rounded-2xl p-4 text-center space-y-2">
-          <p className="text-xs text-white/40 font-semibold uppercase tracking-wider">📲 {lang === 'he' ? 'התקן את האפליקציה' : 'Install App'}</p>
-          <p className="text-xs text-white/30 leading-relaxed">
-            {lang === 'he'
-              ? 'iOS: Safari → שתף → "הוסף למסך הבית"\nAndroid: Chrome → ⋮ → "הוסף למסך הבית"'
-              : 'iOS: Safari → Share → "Add to Home Screen"\nAndroid: Chrome → ⋮ → "Add to Home Screen"'}
-          </p>
-        </div>
+        {installed ? (
+          <div className="glass-card border border-green-400/20 rounded-2xl p-4 text-center">
+            <p className="text-xs text-green-400/70">✅ {lang === 'he' ? 'האפליקציה מותקנת' : 'App installed'}</p>
+          </div>
+        ) : canInstall ? (
+          <button
+            onClick={triggerInstall}
+            className="w-full glass-card border border-[hsl(290,100%,65%,0.3)] rounded-2xl p-4 flex items-center gap-3 text-start"
+            style={{ background: 'hsl(290,100%,65%,0.07)' }}
+          >
+            <span className="text-2xl">📲</span>
+            <div className="flex-1">
+              <p className="text-sm font-bold text-white">{lang === 'he' ? 'הוסף למסך הבית' : 'Add to Home Screen'}</p>
+              <p className="text-xs text-white/40">{lang === 'he' ? 'גישה מהירה ללא דפדפן' : 'Instant access without browser'}</p>
+            </div>
+            <span className="text-[hsl(290,100%,70%)] text-xs font-semibold shrink-0">{lang === 'he' ? 'התקן' : 'Install'}</span>
+          </button>
+        ) : (
+          <div className="glass-card border border-white/8 rounded-2xl p-4 text-center space-y-2">
+            <p className="text-xs text-white/40 font-semibold uppercase tracking-wider">📲 {lang === 'he' ? 'התקן את האפליקציה' : 'Install App'}</p>
+            <p className="text-xs text-white/30 leading-relaxed" style={{ whiteSpace: 'pre-line' }}>
+              {lang === 'he'
+                ? 'iOS: Safari → שתף → "הוסף למסך הבית"\nAndroid: Chrome → ⋮ → "הוסף למסך הבית"'
+                : 'iOS: Safari → Share → "Add to Home Screen"\nAndroid: Chrome → ⋮ → "Add to Home Screen"'}
+            </p>
+          </div>
+        )}
 
         {/* Terms */}
         <button onClick={() => navigate('/terms')} className="w-full text-center text-xs text-white/20 hover:text-white/40 transition-colors py-1 underline">
@@ -339,6 +408,41 @@ export default function Profile() {
         <NeonButton variant="danger" size="md" fullWidth onClick={handleSignOut}>
           🚪 {t(lang, 'signOut')}
         </NeonButton>
+
+        {/* Delete account */}
+        <div className="space-y-2">
+          {deleteConfirm && (
+            <p className="text-xs text-red-400/80 text-center leading-relaxed">
+              {lang === 'he'
+                ? '⚠️ פעולה זו תמחק את כל הנתונים שלך לצמיתות. לא ניתן לבטל.'
+                : '⚠️ This will permanently delete all your data. This cannot be undone.'}
+            </p>
+          )}
+          <button
+            onClick={handleDeleteAccount}
+            disabled={deleting}
+            className="w-full py-2.5 rounded-xl text-xs font-semibold transition-all disabled:opacity-40"
+            style={{
+              color: deleteConfirm ? '#f87171' : 'rgba(255,255,255,0.2)',
+              background: deleteConfirm ? 'rgba(248,113,113,0.08)' : 'transparent',
+              border: deleteConfirm ? '1px solid rgba(248,113,113,0.25)' : '1px solid transparent',
+            }}
+          >
+            {deleting
+              ? '⏳ ' + (lang === 'he' ? 'מוחק...' : 'Deleting...')
+              : deleteConfirm
+                ? '🗑️ ' + (lang === 'he' ? 'אשר מחיקת חשבון' : 'Confirm delete account')
+                : lang === 'he' ? 'מחק חשבון' : 'Delete account'}
+          </button>
+          {deleteConfirm && (
+            <button
+              onClick={() => setDeleteConfirm(false)}
+              className="w-full text-center text-xs text-white/20 hover:text-white/40 transition-colors py-1"
+            >
+              {lang === 'he' ? 'ביטול' : 'Cancel'}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )

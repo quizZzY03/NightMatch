@@ -2,10 +2,12 @@ import {
   RecaptchaVerifier,
   signInWithPhoneNumber,
   signOut as fbSignOut,
+  deleteUser,
   GoogleAuthProvider,
   OAuthProvider,
   signInWithPopup,
   signInWithRedirect,
+  getRedirectResult,
   sendSignInLinkToEmail,
   isSignInWithEmailLink,
   signInWithEmailLink,
@@ -73,21 +75,39 @@ export async function completeEmailLink(): Promise<User | null> {
   return result.user
 }
 
-function isMobile(): boolean {
-  return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
-    window.matchMedia('(display-mode: standalone)').matches
+function isStandalone(): boolean {
+  return window.matchMedia('(display-mode: standalone)').matches
+    || (navigator as { standalone?: boolean }).standalone === true
+}
+
+function isAndroid(): boolean {
+  return /Android/i.test(navigator.userAgent)
 }
 
 export async function signInWithGoogle(): Promise<User> {
   if (!FIREBASE_CONFIGURED) throw new Error('Firebase not configured')
   const provider = new GoogleAuthProvider()
   provider.setCustomParameters({ prompt: 'select_account' })
-  if (isMobile()) {
+
+  // Android (both browser and installed PWA): use redirect — popups are blocked
+  if (isAndroid()) {
     await signInWithRedirect(auth, provider)
     return {} as User // page navigates away — never reached
   }
-  const result = await signInWithPopup(auth, provider)
-  return result.user
+
+  // iOS Safari / desktop: use popup (redirect doesn't work reliably in iOS Safari / PWA)
+  // Fall back to redirect if popup is blocked
+  try {
+    const result = await signInWithPopup(auth, provider)
+    return result.user
+  } catch (err: unknown) {
+    const code = (err as { code?: string })?.code
+    if (code === 'auth/popup-blocked' || code === 'auth/popup-closed-by-user') {
+      await signInWithRedirect(auth, provider)
+      return {} as User
+    }
+    throw err
+  }
 }
 
 export async function signInWithApple(): Promise<User> {
@@ -95,13 +115,31 @@ export async function signInWithApple(): Promise<User> {
   const provider = new OAuthProvider('apple.com')
   provider.addScope('email')
   provider.addScope('name')
-  const result = await signInWithPopup(auth, provider)
-  return result.user
+  // Apple sign-in: always try popup first; fall back to redirect
+  try {
+    const result = await signInWithPopup(auth, provider)
+    return result.user
+  } catch (err: unknown) {
+    const code = (err as { code?: string })?.code
+    if (code === 'auth/popup-blocked' || code === 'auth/popup-closed-by-user') {
+      await signInWithRedirect(auth, provider)
+      return {} as User
+    }
+    throw err
+  }
 }
 
 export async function signOut(): Promise<void> {
   if (!FIREBASE_CONFIGURED) return
   await fbSignOut(auth)
+}
+
+/** Delete the current Firebase Auth account. Throws 'auth/requires-recent-login' if session is stale. */
+export async function deleteAccount(): Promise<void> {
+  if (!FIREBASE_CONFIGURED) return
+  const user = auth.currentUser
+  if (!user) throw new Error('no-user')
+  await deleteUser(user)
 }
 
 export function getCurrentFirebaseUser(): User | null {
@@ -112,4 +150,20 @@ export function getCurrentFirebaseUser(): User | null {
 export function onAuthStateChanged(callback: (user: User | null) => void): () => void {
   if (!FIREBASE_CONFIGURED) { callback(null); return () => {} }
   return auth.onAuthStateChanged(callback)
+}
+
+/**
+ * Must be called once on app start to complete Google/Apple signInWithRedirect flows.
+ * On mobile, after the OAuth redirect returns the user to the app, Firebase needs
+ * this call to finalize the credential exchange. Without it, onAuthStateChanged fires null.
+ */
+export async function handleRedirectResult(): Promise<User | null> {
+  if (!FIREBASE_CONFIGURED) return null
+  try {
+    const result = await getRedirectResult(auth)
+    return result?.user ?? null
+  } catch {
+    // e.g. popup_closed_by_user — safe to ignore
+    return null
+  }
 }
