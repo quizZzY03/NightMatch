@@ -7,8 +7,11 @@ import { useApp } from '../context/AppContext'
 import { seedProductionVenues } from '../utils/seedVenues'
 import AdminTestPanel from './AdminTestPanel'
 
+const APP_BASE = 'https://nightmatch-34424.web.app'
+
 function qrUrl(venueId: string, size = 280) {
-  return `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(venueId)}&size=${size}x${size}&bgcolor=ffffff&color=000000&qzone=2`
+  const deepLink = `${APP_BASE}/checkin?venue=${venueId}`
+  return `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(deepLink)}&size=${size}x${size}&bgcolor=ffffff&color=000000&qzone=2`
 }
 
 function downloadQR(venue) {
