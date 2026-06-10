@@ -50,7 +50,7 @@ export default function Chat() {
 
   async function handleUnmatch() {
     if (!matchId || !window.confirm(lang === 'he' ? 'לבטל את ההתאמה?' : 'Unmatch this person?')) return
-    await unmatchUser(matchId)
+    try { await unmatchUser(matchId) } catch (e) { console.error('Unmatch failed:', e) }
     navigate('/matches')
   }
 
@@ -58,18 +58,25 @@ export default function Chat() {
     if (!user || !match) return
     const otherId = match.user1_id === user.id ? match.user2_id : match.user1_id
     if (!window.confirm(lang === 'he' ? 'לחסום משתמש זה?' : 'Block this user?')) return
-    await blockUser(user.id, otherId)
-    await unmatchUser(matchId!)
+    try {
+      await blockUser(user.id, otherId)
+      await unmatchUser(matchId!)
+    } catch (e) { console.error('Block failed:', e) }
     navigate('/matches')
   }
 
   async function handleReport() {
     if (!user || !match || !reportReason.trim()) return
     const otherId = match.user1_id === user.id ? match.user2_id : match.user1_id
-    await reportUser(user.id, otherId, reportReason.trim())
-    setShowReport(false)
-    setReportReason('')
-    alert(lang === 'he' ? 'הדיווח נשלח. תודה.' : 'Report sent. Thank you.')
+    try {
+      await reportUser(user.id, otherId, reportReason.trim())
+      setShowReport(false)
+      setReportReason('')
+      alert(lang === 'he' ? 'הדיווח נשלח. תודה.' : 'Report sent. Thank you.')
+    } catch (e) {
+      console.error('Report failed:', e)
+      alert(lang === 'he' ? 'שליחת הדיווח נכשלה — נסה שוב' : 'Report failed — try again')
+    }
   }
 
   function shareInstagram() {

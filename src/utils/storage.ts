@@ -99,7 +99,8 @@ export function getFeedPeople(venueId: string, filter = 'all'): FeedPerson[] {
   const user = getCurrentUser()
   const liked = get<string[]>('liked_ids') ?? []
   const passed = get<string[]>('passed_ids') ?? []
-  const seen = [...liked, ...passed]
+  const blocked = get<string[]>('blocked_ids') ?? []
+  const seen = [...liked, ...passed, ...blocked]
   const pool = get<FeedPerson[]>('demo_feed_people') ?? MOCK_PEOPLE
   return pool.filter(p => {
     if (p.id === user?.id) return false
@@ -151,6 +152,16 @@ function createMatch(targetId: string): Match | null {
 
 export function getMatches(): Match[] {
   return (get<Match[]>('matches') ?? []).filter(m => m.is_active)
+}
+
+export function unmatchMatch(matchId: string): void {
+  const matches = get<Match[]>('matches') ?? []
+  set('matches', matches.map(m => m.id === matchId ? { ...m, is_active: false } : m))
+}
+
+export function blockPerson(blockedId: string): void {
+  const blocked = get<string[]>('blocked_ids') ?? []
+  if (!blocked.includes(blockedId)) set('blocked_ids', [...blocked, blockedId])
 }
 
 export function getMatchById(id: string): Match | undefined {

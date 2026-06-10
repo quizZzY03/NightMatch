@@ -335,13 +335,20 @@ export async function sendMessage(matchId: string, text: string, senderId: strin
 
 // ── Unmatch ───────────────────────────────────────────────────────────────────
 export async function unmatchUser(matchId: string): Promise<void> {
-  if (!FIREBASE_CONFIGURED) return
+  // Demo matches live only in localStorage — Firestore has no doc for them
+  if (!FIREBASE_CONFIGURED || local.getCurrentUser()?.id === 'demo-user') {
+    local.unmatchMatch(matchId)
+    return
+  }
   await updateDoc(doc(db, 'matches', matchId), { is_active: false })
 }
 
 // ── Block / Report ────────────────────────────────────────────────────────────
 export async function blockUser(blockerId: string, blockedId: string): Promise<void> {
-  if (!FIREBASE_CONFIGURED) return
+  if (!FIREBASE_CONFIGURED || blockerId === 'demo-user') {
+    local.blockPerson(blockedId)
+    return
+  }
   await setDoc(doc(db, 'blocks', `${blockerId}_${blockedId}`), {
     blocker_id: blockerId,
     blocked_id: blockedId,
@@ -350,7 +357,7 @@ export async function blockUser(blockerId: string, blockedId: string): Promise<v
 }
 
 export async function reportUser(reporterId: string, reportedId: string, reason: string): Promise<void> {
-  if (!FIREBASE_CONFIGURED) return
+  if (!FIREBASE_CONFIGURED || reporterId === 'demo-user') return
   await addDoc(collection(db, 'reports'), {
     reporter_id: reporterId,
     reported_id: reportedId,
