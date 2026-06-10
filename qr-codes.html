@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <title>NightMatch — QR Codes להדפסה</title>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; background: #0a0a12; color: #fff; padding: 32px; }
+    h1 { text-align: center; font-size: 28px; margin-bottom: 8px; color: #e879f9; }
+    .subtitle { text-align: center; color: #ffffff60; font-size: 13px; margin-bottom: 40px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 24px; }
+    .card {
+      background: #1a1228;
+      border: 1px solid #ffffff18;
+      border-radius: 20px;
+      padding: 24px;
+      text-align: center;
+      break-inside: avoid;
+    }
+    .venue-name { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+    .venue-city { font-size: 13px; color: #ffffff50; margin-bottom: 4px; }
+    .venue-id   { font-size: 11px; color: #e879f940; font-family: monospace; margin-bottom: 16px; }
+    canvas { border-radius: 12px; background: #fff; padding: 10px; }
+    .url { font-size: 10px; color: #ffffff30; margin-top: 12px; word-break: break-all; }
+    .badge {
+      display: inline-block;
+      margin-bottom: 12px;
+      padding: 3px 10px;
+      border-radius: 99px;
+      font-size: 11px;
+      font-weight: 600;
+      background: #e879f920;
+      color: #e879f9;
+      border: 1px solid #e879f940;
+    }
+
+    @media print {
+      body { background: #fff; color: #000; padding: 16px; }
+      h1, .subtitle { color: #000; }
+      .card { background: #fff; border: 1px solid #ccc; page-break-inside: avoid; }
+      .venue-city { color: #666; }
+      .venue-id, .url { color: #999; }
+      .badge { background: #f3e8ff; color: #7c3aed; border-color: #c4b5fd; }
+    }
+  </style>
+</head>
+<body>
+
+<h1>🌙 NightMatch — QR Codes</h1>
+<p class="subtitle">הדפס וחתוך — הדבק בכל מקום בוונה. הסריקה תפתח את האפליקציה ישירות לצ'ק-אין.</p>
+
+<div class="grid" id="grid"></div>
+
+<script>
+const APP_URL = 'https://nightmatch-34424.web.app'
+
+const VENUES = [
+  { id: 'rotch-rishon',     name: 'רוטשילד 26',    city: 'ראשון לציון', type: '🍸' },
+  { id: 'beer-house-rishon',name: 'ביר האוס',       city: 'ראשון לציון', type: '🍸' },
+  { id: 'pirate-pub-rishon',name: 'פאב הפיראט',     city: 'ראשון לציון', type: '🍸' },
+  { id: 'garden83-rishon',  name: 'גארדן 83',       city: 'ראשון לציון', type: '🍸' },
+  { id: 'pacho-rishon',     name: "פאצ'ו",          city: 'ראשון לציון', type: '🍸' },
+  { id: 'pub55-rishon',     name: 'פאב 55',         city: 'ראשון לציון', type: '🍸' },
+  { id: 'temple-bar-rishon',name: 'Temple Bar',      city: 'ראשון לציון', type: '🍸' },
+]
+
+const grid = document.getElementById('grid')
+
+VENUES.forEach(v => {
+  const url = `${APP_URL}/checkin?venue=${v.id}`
+
+  const card = document.createElement('div')
+  card.className = 'card'
+  card.innerHTML = `
+    <div class="badge">${v.type} NightMatch</div>
+    <div class="venue-name">${v.name}</div>
+    <div class="venue-city">${v.city}</div>
+    <div class="venue-id">ID: ${v.id}</div>
+    <canvas id="qr-${v.id}"></canvas>
+    <div class="url">${url}</div>
+  `
+  grid.appendChild(card)
+
+  QRCode.toCanvas(
+    document.getElementById(`qr-${v.id}`),
+    url,
+    { width: 200, margin: 1, color: { dark: '#000000', light: '#ffffff' } },
+    err => { if (err) console.error(err) }
+  )
+})
+</script>
+
+</body>
+</html>

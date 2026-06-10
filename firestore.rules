@@ -1,0 +1,138 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helper: is the requesting user an admin? ────────────────────────────
+    function isAdmin() {
+      return request.auth != null
+          && request.auth.uid == 'l6dNiPruVDRF1HgOu2L5ffEpsCC3';
+    }
+
+    // ── Users ──────────────────────────────────────────────────────────────────
+    // Read/write only your own document.
+    // Clients cannot grant themselves is_admin or inflate is_premium.
+    match /users/{userId} {
+      allow read:   if request.auth != null && (request.auth.uid == userId || isAdmin());
+      allow create: if request.auth != null && request.auth.uid == userId
+                    && request.resource.data.get('is_admin', false) != true;
+      allow update: if request.auth != null && request.auth.uid == userId
+                    // Prevent self-granting is_admin or is_premium
+                    && !(request.resource.data.get('is_admin', false) == true
+                         && resource.data.get('is_admin', false) == false)
+                    && !(request.resource.data.get('is_premium', false) == true
+                         && resource.data.get('is_premium', false) == false);
+      allow delete: if false;
+    }
+
+    // ── Venues ─────────────────────────────────────────────────────────────────
+    // Anyone can read. Only admin can write (via Admin panel or Firebase console).
+    match /venues/{venueId} {
+      allow read:  if true;
+      allow write: if isAdmin();
+    }
+
+    // ── Check-ins ──────────────────────────────────────────────────────────────
+    // Any logged-in user can read (needed to build the feed).
+    // A user can only create/update/delete their own check-in.
+    // Admin can create test check-ins (is_test: true) for any user_id.
+    match /checkins/{docId} {
+      allow read:   if request.auth != null;
+      allow create: if isAdmin()
+                    || (request.auth != null
+                        && request.resource.data.user_id == request.auth.uid);
+      allow update: if isAdmin()
+                    || (request.auth != null && resource.data.user_id == request.auth.uid);
+      allow delete: if isAdmin()
+                    || (request.auth != null && resource.data.user_id == request.auth.uid);
+    }
+
+    // ── Matches ────────────────────────────────────────────────────────────────
+    match /matches/{matchId} {
+      allow read: if isAdmin()
+                  || (request.auth != null
+                      && (resource.data.user1_id == request.auth.uid
+                       || resource.data.user2_id == request.auth.uid));
+
+      allow create: if isAdmin()
+                    || (request.auth != null
+                        && (request.resource.data.user1_id == request.auth.uid
+                         || request.resource.data.user2_id == request.auth.uid));
+
+      allow update: if isAdmin()
+                    || (request.auth != null
+                        && (resource.data.user1_id == request.auth.uid
+                         || resource.data.user2_id == request.auth.uid)
+                        // Prevent changing the participants or venue
+                        && request.resource.data.user1_id == resource.data.user1_id
+                        && request.resource.data.user2_id == resource.data.user2_id
+                        && request.resource.data.venue_id  == resource.data.venue_id);
+
+      allow delete: if false;
+    }
+
+    // ── Messages ───────────────────────────────────────────────────────────────
+    match /messages/{msgId} {
+      allow read: if request.auth != null
+                  && exists(/databases/$(database)/documents/matches/$(resource.data.match_id))
+                  && (get(/databases/$(database)/documents/matches/$(resource.data.match_id)).data.user1_id == request.auth.uid
+                   || get(/databases/$(database)/documents/matches/$(resource.data.match_id)).data.user2_id == request.auth.uid);
+
+      allow create: if request.auth != null
+                    && request.resource.data.sender_id == request.auth.uid
+                    // Message must not exceed 2000 chars
+                    && request.resource.data.text is string
+                    && request.resource.data.text.size() <= 2000
+                    && exists(/databases/$(database)/documents/matches/$(request.resource.data.match_id))
+                    && (get(/databases/$(database)/documents/matches/$(request.resource.data.match_id)).data.user1_id == request.auth.uid
+                     || get(/databases/$(database)/documents/matches/$(request.resource.data.match_id)).data.user2_id == request.auth.uid);
+
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // ── Likes ──────────────────────────────────────────────────────────────────
+    match /likes/{docId} {
+      allow read: if isAdmin()
+                  || (request.auth != null
+                      && (resource.data.from_user_id == request.auth.uid
+                       || resource.data.to_user_id   == request.auth.uid));
+      allow create: if isAdmin()
+                    || (request.auth != null
+                        && request.resource.data.from_user_id == request.auth.uid);
+      allow update: if false;
+      allow delete: if isAdmin()
+                    || (request.auth != null
+                        && resource.data.from_user_id == request.auth.uid);
+    }
+
+    // ── Notifications ──────────────────────────────────────────────────────────
+    match /notifications/{docId} {
+      allow read:   if request.auth != null && resource.data.user_id == request.auth.uid;
+      // Any authenticated user can send a notification (e.g., super-like notification)
+      allow create: if request.auth != null;
+      allow update: if request.auth != null && resource.data.user_id == request.auth.uid;
+      allow delete: if false;
+    }
+
+    // ── Blocks ─────────────────────────────────────────────────────────────────
+    // Only the blocker can read/create/delete their own blocks.
+    match /blocks/{docId} {
+      allow read:   if request.auth != null && resource.data.blocker_id == request.auth.uid;
+      allow create: if request.auth != null
+                    && request.resource.data.blocker_id == request.auth.uid;
+      allow update: if false;
+      allow delete: if request.auth != null && resource.data.blocker_id == request.auth.uid;
+    }
+
+    // ── Reports ────────────────────────────────────────────────────────────────
+    // Only admin can read reports. Any authenticated user can file a report.
+    match /reports/{docId} {
+      allow read:   if isAdmin();
+      allow create: if request.auth != null
+                    && request.resource.data.reporter_id == request.auth.uid;
+      allow update: if false;
+      allow delete: if false;
+    }
+
+  }
+}
