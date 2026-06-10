@@ -16,7 +16,10 @@ export default function GpsVerify({ venue, lang, onSuccess, onCancel }: {
   const user = getCurrentUser()
   const [state, setState] = useState<'profile_confirm' | 'success'>('profile_confirm')
   const [editingStatus, setEditingStatus] = useState(false)
-  const [status, setStatus] = useState(user?.tonight_status || '')
+  // Multiple statuses, stored joined with ' · ' — same convention as Profile/Onboarding
+  const [statuses, setStatuses] = useState<string[]>(
+    user?.tonight_status ? user.tonight_status.split(' · ').filter(Boolean) : []
+  )
   const open = isOperatingHours()
   const he = lang === 'he'
 
@@ -28,9 +31,14 @@ export default function GpsVerify({ venue, lang, onSuccess, onCancel }: {
   const venueIcon = VENUE_ICON[venue.venue_type ?? ''] ?? '📍'
 
   function confirmProfile() {
-    if (status !== user?.tonight_status) saveUser({ tonight_status: status })
+    const joined = statuses.join(' · ')
+    if (joined !== user?.tonight_status) saveUser({ tonight_status: joined })
     setState('success')
     setTimeout(() => onSuccess(), 900)
+  }
+
+  function toggleStatus(opt: string) {
+    setStatuses(prev => prev.includes(opt) ? prev.filter(s => s !== opt) : [...prev, opt])
   }
 
   const canDismiss = state !== 'success'
@@ -160,23 +168,41 @@ export default function GpsVerify({ venue, lang, onSuccess, onCancel }: {
 
                   {editingStatus ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      {STATUS_OPTIONS.map(opt => (
-                        <button key={opt} onClick={() => { setStatus(opt); setEditingStatus(false) }} style={{
-                          textAlign: he ? 'right' : 'left', fontSize: 14,
-                          padding: '10px 12px', borderRadius: 12, cursor: 'pointer',
-                          transition: 'all 0.15s',
-                          border: status === opt ? '1px solid hsl(290,100%,65%)' : '1px solid rgba(255,255,255,0.1)',
-                          background: status === opt ? 'hsla(290,100%,65%,0.15)' : 'rgba(255,255,255,0.04)',
-                          color: status === opt ? '#fff' : 'rgba(255,255,255,0.5)',
-                        }}>{opt}</button>
-                      ))}
+                      {STATUS_OPTIONS.map(opt => {
+                        const selected = statuses.includes(opt)
+                        return (
+                          <button key={opt} onClick={() => toggleStatus(opt)} style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            textAlign: he ? 'right' : 'left', fontSize: 14,
+                            padding: '10px 12px', borderRadius: 12, cursor: 'pointer',
+                            transition: 'all 0.15s',
+                            border: selected ? '1px solid hsl(290,100%,65%)' : '1px solid rgba(255,255,255,0.1)',
+                            background: selected ? 'hsla(290,100%,65%,0.15)' : 'rgba(255,255,255,0.04)',
+                            color: selected ? '#fff' : 'rgba(255,255,255,0.5)',
+                          }}>
+                            <span>{opt}</span>
+                            {selected && <span style={{ color: 'hsl(290,100%,65%)', fontWeight: 700 }}>✓</span>}
+                          </button>
+                        )
+                      })}
+                      <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', margin: '2px 0 0', textAlign: 'center' }}>
+                        {he ? 'אפשר לבחור כמה שרוצים' : 'Pick as many as you like'}
+                      </p>
                     </div>
                   ) : (
                     <div style={{
+                      display: 'flex', flexWrap: 'wrap', gap: 6,
                       background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)',
                       borderRadius: 12, padding: '10px 16px', fontSize: 14, color: 'rgba(255,255,255,0.8)',
                     }}>
-                      {status || <span style={{ color: 'rgba(255,255,255,0.3)' }}>{he ? 'לא נבחר סטטוס' : 'No status selected'}</span>}
+                      {statuses.length > 0
+                        ? statuses.map(s => (
+                            <span key={s} style={{
+                              fontSize: 13, padding: '3px 10px', borderRadius: 99,
+                              background: 'hsla(290,100%,65%,0.12)', border: '1px solid hsla(290,100%,65%,0.3)',
+                            }}>{s}</span>
+                          ))
+                        : <span style={{ color: 'rgba(255,255,255,0.3)' }}>{he ? 'לא נבחר סטטוס' : 'No status selected'}</span>}
                     </div>
                   )}
                 </div>
