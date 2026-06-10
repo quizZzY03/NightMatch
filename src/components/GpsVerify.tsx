@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { isOperatingHours } from '../utils/geo'
 import { getCurrentUser, saveUser } from '../utils/storage'
@@ -34,11 +35,14 @@ export default function GpsVerify({ venue, lang, onSuccess, onCancel }: {
 
   const canDismiss = state !== 'success'
 
-  return (
+  // Rendered via portal to document.body — ancestors in Layout carry framer-motion
+  // transforms, which turn position:fixed into position relative to the transformed
+  // ancestor on iOS Safari (modal ends up clipped under the bottom nav).
+  return createPortal(
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       style={{
-        position: 'fixed', inset: 0, zIndex: 50,
+        position: 'fixed', inset: 0, zIndex: 9999,
         display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
         background: 'rgba(10,10,18,0.92)', backdropFilter: 'blur(18px)',
       }}
@@ -49,7 +53,9 @@ export default function GpsVerify({ venue, lang, onSuccess, onCancel }: {
         transition={{ type: 'spring', stiffness: 300, damping: 28 }}
         style={{
           width: '100%', maxWidth: 448,
-          maxHeight: '88dvh',
+          /* % of the fixed backdrop tracks the visible viewport on iOS — unlike
+             dvh (needs iOS 16.4+) or vh (ignores Safari's collapsing toolbars) */
+          maxHeight: '88%',
           display: 'flex', flexDirection: 'column',
           borderRadius: '24px 24px 0 0',
           overflow: 'hidden',               /* ← clips children so flex works */
@@ -210,6 +216,7 @@ export default function GpsVerify({ venue, lang, onSuccess, onCancel }: {
 
         </AnimatePresence>
       </motion.div>
-    </motion.div>
+    </motion.div>,
+    document.body
   )
 }

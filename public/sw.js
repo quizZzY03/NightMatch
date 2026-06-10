@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nightmatch-v5';
+const CACHE_NAME = 'nightmatch-v6';
 
 const PRECACHE = ['/', '/index.html', '/offline.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
